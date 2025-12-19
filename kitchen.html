@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="hy">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Խոհանոցի Պանել</title>
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+    <style>
+        /* --- ԸՆԴՀԱՆՈՒՐ ՈՃԵՐ --- */
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+        header {
+            background: #1a4d2e;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 12px;
+            margin-bottom: 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        h1 { margin: 0; font-size: 28px; }
+        .order-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+        }
+        .order-card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            border: 2px solid #ddd;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            position: relative;
+        }
+        
+        /* --- ԿԱՐԳԱՎԻՃԱԿԻ ՈՃԵՐ --- */
+        .order-card.new { border-left: 8px solid #007bff; }
+        .order-card.ready { border-left: 8px solid #28a745; background-color: #e6ffed; }
+        
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+            margin-bottom: 10px;
+        }
+        .table-num {
+            font-size: 32px;
+            font-weight: 900;
+            color: #1a4d2e;
+        }
+        .order-time {
+            font-size: 14px;
+            color: #777;
+            font-weight: 600;
+        }
+        .items-list {
+            list-style: none;
+            padding: 0;
+            margin: 10px 0;
+            flex-grow: 1;
+        }
+        .item {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+            font-size: 16px;
+            border-bottom: 1px dashed #f1f1f1;
+        }
+        .item-name { font-weight: 600; }
+        .item-qty { font-weight: 900; color: #dc3545; }
+        .comment {
+            background: #f8f8f8;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 14px;
+            color: #555;
+            margin-top: 10px;
+            border-left: 4px solid #ffc107;
+        }
+        .action-button {
+            width: 100%;
+            padding: 15px;
+            margin-top: 15px;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .btn-done {
+            background-color: #28a745;
+            color: white;
+        }
+        .btn-done:hover { background-color: #218838; }
+        
+        /* Ժամանակացույցի ոճ (Timer) */
+        .timer {
+            font-size: 14px;
+            font-weight: bold;
+            color: #777;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>👨‍🍳 Խոհանոցի Պատվերների Մատյան</h1>
+        <div id="kitchenStatus">Սպասում է պատվերների...</div>
+    </header>
+
+    <div class="order-container" id="ordersContainer">
+        </div>
+
+    <script>
+        // ==========================================
+        // ԴԻՐ ՔՈ FIREBASE-Ի ՏՎՅԱԼՆԵՐԸ ԱՅՍՏԵՂ
+        // ==========================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyBzKoNezvEjHAkz7oqR5ZT2oYIzgaKS9HA",
+            authDomain: "dolmamenu.firebaseapp.com",
+            projectId: "dolmamenu",
+            storageBucket: "dolmamenu.firebasestorage.app",
+            messagingSenderId: "79065105652",
+            appId: "1:79065105652:web:58dc22269a56c6c4ca4aa1",
+            measurementId: "G-QX4RMX94QC"
+        };
+        // ==========================================
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        document.addEventListener('DOMContentLoaded', () => {
+            listenForOrders();
+            // ԾԱՆՈՒՑՈՒՄՆԵՐԻ ԹՈՒՅԼՏՎՈՒԹՅԱՆ ՀԱՐՑՈՒՄ
+            if ('Notification' in window) {
+                Notification.requestPermission();
+            }
+        });
+
+        // ---------------------------------------------------
+        //  FIREBASE-Ի ԼՍՈՂԸ (LISTENER)
+        // ---------------------------------------------------
+
+        function listenForOrders() {
+            // Լսում ենք orders ճյուղի բոլոր փոփոխությունները
+            db.ref('orders').on('value', (snapshot) => {
+                const orders = snapshot.val() || {};
+                renderOrders(orders);
+                checkNewOrder(orders);
+            });
+        }
+        
+        // ---------------------------------------------------
+        //  ՆՈՐ ՊԱՏՎԵՐԻ ԾԱՆՈՒՑՈՒՄ
+        // ---------------------------------------------------
+
+        let lastOrderCount = 0;
+
+        function checkNewOrder(orders) {
+            let activeOrderCount = 0;
+            for(const key in orders) {
+                const order = orders[key];
+                // Հաշվում ենք միայն ակտիվ (չփակված) ապրանքային պատվերները
+                if (!order.status_kitchen_closed && order.items && !isServiceRequest(order)) {
+                     activeOrderCount++;
+                }
+            }
+
+            if (activeOrderCount > lastOrderCount && lastOrderCount > 0) {
+                 playSound();
+                 showNotification('🔔 ՆՈՐ ՊԱՏՎԵՐ ԽՈՀԱՆՈՑԻՆ', 'kitchen');
+            }
+            lastOrderCount = activeOrderCount;
+        }
+
+        function isServiceRequest(order) {
+            return order.items.some(item => 
+                item.name.includes("ՀԱՇԻՎ") || item.name.includes("ԿԱՆՉ") || item.name.includes("ՀԱՐՑՆՈՒՄ")
+            );
+        }
+
+        function playSound() {
+            const audio = new Audio('https://actions.google.com/sounds/v1/alarms/buzz_woody.ogg');
+            audio.play().catch(e=>{});
+        }
+        
+        function showNotification(body, role) {
+            if (Notification.permission === 'granted') {
+                const title = 'Խոհանոց PRO';
+                new Notification(title, { body: body });
+            }
+        }
+
+
+        // ---------------------------------------------------
+        //  ՊԱՏՎԵՐՆԵՐԻ ՑՈՒՑԱԴՐՈՒՄ
+        // ---------------------------------------------------
+        
+        function renderOrders(allOrders) {
+            const container = document.getElementById('ordersContainer');
+            container.innerHTML = '';
+            
+            let ordersToDisplay = [];
+
+            // Զտում ենք պատվերները
+            for (const key in allOrders) {
+                const order = allOrders[key];
+                
+                // Ցուցադրում ենք միայն չփակված (չմատուցված) պատվերները
+                if (!order.status_kitchen_closed) {
+                     // Բացառում ենք ծառայողական հարցումները (Կանչ, Հաշիվ, Հարցնում)
+                    if (!isServiceRequest(order)) {
+                        ordersToDisplay.push({ key, order });
+                    }
+                }
+            }
+
+            // Դասավորում ենք ըստ հնության (ամենահինը՝ վերևում)
+            ordersToDisplay.sort((a, b) => a.order.timestamp - b.order.timestamp);
+            
+            let activeOrderCount = 0;
+            
+            ordersToDisplay.forEach(({ key, order }) => {
+                
+                // Ստուգում ենք, թե արդյոք պատրաստ է, բայց դեռ չի փակվել
+                const isDone = order.status_kitchen_done;
+                const cardClass = isDone ? 'order-card ready' : 'order-card new';
+                const buttonText = isDone ? '✅ Պատրաստ է' : 'Մատուցելու Է Խոհարարը';
+                const buttonColor = isDone ? '#28a745' : '#007bff';
+                activeOrderCount++;
+
+                const itemListHTML = order.items.map(item => `
+                    <li class="item">
+                        <span class="item-name">${item.name}</span>
+                        <span class="item-qty">x${item.qty}</span>
+                    </li>
+                `).join('');
+                
+                const commentHTML = order.comment ? `<div class="comment">Նշում: ${order.comment}</div>` : '';
+                const orderTime = new Date(order.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+
+                // ՊԱՏՎԵՐԻ ՔԱՐՏ
+                container.innerHTML += `
+                    <div class="${cardClass}" data-order-key="${key}">
+                        <div>
+                            <div class="table-header">
+                                <div class="table-num">Սեղան #${order.table}</div>
+                                <div class="order-time">${orderTime}</div>
+                            </div>
+                            
+                            <ul class="items-list">
+                                ${itemListHTML}
+                            </ul>
+
+                            ${commentHTML}
+                        </div>
+                        
+                        <button class="action-button btn-done" 
+                                onclick="markOrderAsDone('${key}')"
+                                style="background-color: ${buttonColor};">
+                            ${buttonText}
+                        </button>
+                    </div>
+                `;
+                
+                // Սկսում ենք ժամանակաչափը
+                startTimer(order.timestamp, key);
+            });
+            
+            document.getElementById('kitchenStatus').innerText = `Ակտիվ Պատվերներ: ${activeOrderCount}`;
+
+            if (activeOrderCount === 0) {
+                 container.innerHTML = '<p style="text-align: center; font-size: 1.2em; color:#777;">Այս պահին պատվերներ չկան։</p>';
+            }
+        }
+
+        // ---------------------------------------------------
+        //  ԺԱՄԱՆԱԿԱՉԱՓԻ ԼՈԳԻԿԱ
+        // ---------------------------------------------------
+
+        function startTimer(startTime, orderKey) {
+            const card = document.querySelector(`.order-card[data-order-key="${orderKey}"]`);
+            if (!card) return; 
+
+            // Ավելացնում ենք ժամանակաչափի տողը
+            const timerDiv = document.createElement('div');
+            timerDiv.className = 'timer';
+            timerDiv.id = `timer-${orderKey}`;
+            card.querySelector('.table-header').appendChild(timerDiv); 
+
+            // Սկսում ենք հաշվարկը
+            const interval = setInterval(() => {
+                const diff = Math.floor((Date.now() - startTime) / 1000);
+                const m = Math.floor(diff / 60).toString().padStart(2, '0');
+                const s = (diff % 60).toString().padStart(2, '0');
+                
+                timerDiv.innerText = `Ժամ: ${m}:${s}`;
+                
+                // Դադարեցնում ենք, եթե պատվերը նշվել է որպես պատրաստ (եթե չի անհետացել դեռ)
+                if (card.classList.contains('ready')) {
+                    clearInterval(interval);
+                }
+            }, 1000);
+            
+            // Պահում ենք interval-ը, որպեսզի հնարավոր լինի դադարեցնել
+            card.dataset.timerInterval = interval;
+        }
+
+        // ---------------------------------------------------
+        //  ԳՈՐԾՈՂՈՒԹՅՈՒՆՆԵՐ (ՊԱՏՎԵՐԸ ՊԱՏՐԱՍՏ Է)
+        // ---------------------------------------------------
+
+        function markOrderAsDone(key) {
+            if (confirm("Վստա՞հ եք, որ այս պատվերը պատրաստ է և կարող է մատուցվել։")) {
+                const button = document.querySelector(`.order-card[data-order-key="${key}"] .action-button`);
+                button.innerText = 'Թարմացվում է...';
+                button.disabled = true;
+
+                // Թարմացնում ենք Firebase-ը
+                db.ref('orders/' + key).update({
+                    status_kitchen_done: true,
+                    kitchen_done_time: Date.now()
+                })
+                .then(() => {
+                    alert(`Պատվերը #${key} նշվեց որպես ՊԱՏՐԱՍՏ։`);
+                })
+                .catch(error => {
+                    alert('Սխալ պատվերը թարմացնելիս։');
+                    console.error(error);
+                });
+            }
+        }
+
+    </script>
+</body>
+</html>

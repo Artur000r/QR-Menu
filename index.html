@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="hy">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Dolma Menu PRO</title>
+    
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+
+    <style>
+        /* --- ՈՃԵՐ --- */
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8f9fa; margin: 0; padding: 0 0 120px 0; color: #2c3e50; -webkit-tap-highlight-color: transparent; }
+        header { background: white; padding: 10px 20px 15px; box-shadow: 0 2px 15px rgba(0,0,0,0.05); position: sticky; top: 0; z-index: 100; }
+        .header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .logo-area { display: flex; align-items: center; gap: 10px; }
+        .logo-img-small { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
+        .logo-text { font-size: 20px; font-weight: 800; color: #1a4d2e; }
+        .lang-switch { display: flex; gap: 10px; }
+        .lang-btn { font-size: 22px; cursor: pointer; opacity: 0.5; transition: 0.2s; border: none; background: none; padding: 0; }
+        .lang-btn.active { opacity: 1; transform: scale(1.2); }
+        .table-badge { background: #1a4d2e; color: white; padding: 5px 12px; border-radius: 15px; font-size: 13px; font-weight: 600; }
+        .search-container { position: relative; }
+        .search-input { width: 100%; padding: 12px 15px 12px 40px; border: 2px solid #eee; border-radius: 12px; font-size: 16px; outline: none; background: #f8f9fa; box-sizing: border-box;}
+        .search-input:focus { border-color: #1a4d2e; background: white; }
+        .search-icon { position: absolute; left: 12px; top: 12px; color: #999; }
+        .hidden { display: none !important; }
+        .categories-wrapper { background: white; padding: 10px 15px; white-space: nowrap; overflow-x: auto; border-bottom: 1px solid #eee; position: sticky; top: 125px; z-index: 90; }
+        .cat-btn { display: inline-block; padding: 8px 18px; background: #f1f3f5; border-radius: 20px; margin-right: 10px; font-weight: 600; color: #495057; font-size: 14px; cursor: pointer; transition: 0.2s; }
+        .cat-btn.active { background: #1a4d2e; color: white; }
+        .menu-container { display: grid; grid-template-columns: 1fr; gap: 15px; padding: 15px; max-width: 600px; margin: 0 auto; }
+        .product-card { background: white; border-radius: 16px; padding: 12px; display: flex; gap: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); border: 1px solid #f1f3f5; }
+        .product-card.disabled { opacity: 0.5; pointer-events: none; }
+        .product-img { width: 90px; height: 90px; object-fit: cover; border-radius: 12px; }
+        .product-info { flex-grow: 1; display: flex; flex-direction: column; justify-content: space-between; }
+        .product-title { font-weight: 700; font-size: 16px; margin-bottom: 4px; }
+        .product-desc { font-size: 12px; color: #868e96; margin-bottom: 8px; line-height: 1.3; }
+        .product-price { font-weight: 800; font-size: 15px; color: #2c3e50; }
+        .action-area { align-self: flex-end; }
+        .add-btn { background: #e8f5e9; color: #1a4d2e; border: none; padding: 8px 16px; border-radius: 10px; font-weight: 700; cursor: pointer; font-size: 13px; }
+        .qty-control { display: flex; align-items: center; background: #1a4d2e; border-radius: 10px; }
+        .qty-btn { background: transparent; border: none; color: white; width: 30px; height: 30px; font-size: 18px; font-weight: bold; cursor: pointer; }
+        .qty-val { color: white; font-weight: 700; font-size: 14px; width: 20px; text-align: center; }
+        .mini-cart { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: #1a4d2e; color: white; padding: 15px 25px; border-radius: 50px; box-shadow: 0 5px 20px rgba(0,0,0,0.3); z-index: 900; display: flex; align-items: center; gap: 15px; cursor: pointer; font-weight: bold; font-size: 16px; animation: popIn 0.3s; width: auto; min-width: 200px; justify-content: space-between; }
+        @keyframes popIn { from { transform: translate(-50%, 100px); } to { transform: translate(-50%, 0); } }
+        .cart-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; backdrop-filter: blur(2px); display: none; align-items: flex-end; }
+        .cart-overlay.open { display: flex; }
+        .cart-modal { background: white; width: 100%; border-radius: 25px 25px 0 0; padding: 25px; box-sizing: border-box; max-height: 90vh; overflow-y: auto; animation: slideUp 0.3s ease-out; position: relative; }
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        .close-cart { position: absolute; top: 15px; right: 20px; font-size: 24px; color: #888; background: #f1f1f1; width: 35px; height: 35px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+        
+        #table-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); z-index: 2000; display: flex; align-items: center; justify-content: center; }
+        .modal-content { background: white; padding: 30px; border-radius: 24px; text-align: center; width: 85%; max-width: 320px; }
+        .logo-big { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin-bottom: 15px; border: 1px solid #eee; }
+        .modal-btn { background: #1a4d2e; color: white; padding: 15px; width: 100%; border: none; border-radius: 16px; font-size: 18px; font-weight: bold; }
+        
+        /* ԿԱՐԵՎՈՐ ՆՈՐ ՈՃԵՐ ՍԵՂԱՆՆԵՐԻ ԸՆՏՐՈՒԹՅԱՆ ՀԱՄԱՐ */
+        .table-select-btn {
+            background: #f1f3f5;
+            color: #2c3e50;
+            padding: 15px 5px;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .table-select-btn:hover:not(.locked) {
+            background: #e9ecef;
+        }
+        .table-select-btn.locked {
+            background: #dc3545; /* Կարմիր՝ զբաղված */
+            color: white;
+            cursor: not-allowed;
+            opacity: 0.8;
+            box-shadow: none;
+        }
+        .table-select-btn.unlocked {
+             background: #1a4d2e; /* Կանաչ՝ ազատ */
+             color: white;
+        }
+
+
+        #status-screen { text-align: center; padding: 40px 20px; max-width: 500px; margin: 0 auto; }
+        .status-icon { font-size: 60px; margin-bottom: 15px; display: block; }
+        .timer-box { background: white; padding: 10px 20px; border-radius: 12px; display: inline-block; font-weight: 800; color: #1a4d2e; margin-bottom: 30px; font-size: 24px; border: 1px solid #eee; }
+        .action-btn { display: block; width: 100%; padding: 16px; margin-bottom: 12px; border: none; border-radius: 14px; font-size: 16px; font-weight: 700; cursor: pointer; }
+        .btn-check { background-color: #e7f5ff; color: #1971c2; }
+        .btn-call { background-color: #343a40; color: white; }
+        .btn-bill { background-color: #d4edda; color: #155724; }
+        .btn-new { background: transparent; color: #adb5bd; margin-top: 20px; }
+        .btn-feedback { background-color: #ffc107; color: #333; }
+        #feedbackModal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 3000; display: none; align-items: center; justify-content: center; }
+        #feedbackModal.open { display: flex; }
+        .feedback-content { background: white; border-radius: 16px; padding: 30px; width: 90%; max-width: 400px; text-align: center; }
+        .rating { 
+            display: flex; justify-content: center; margin-bottom: 20px; 
+            direction: rtl;
+        }
+        .rating > input { display: none; }
+        .rating > label { cursor: pointer; width: 30px; height: 30px; color: #ccc; transition: color 0.2s; font-size: 30px; }
+        .rating > label:before { content: "\2605"; } 
+        .rating > input:checked ~ label { color: #ffc107; }
+        .rating > label:hover,
+        .rating > label:hover ~ label { color: #ffc107; }
+        .comment-area { width: 100%; height: 100px; padding: 10px; border: 1px solid #eee; border-radius: 8px; resize: none; margin-bottom: 15px; font-family: inherit; }
+        .send-feedback-btn { background: #1a4d2e; color: white; padding: 12px; width: 100%; border: none; border-radius: 8px; font-weight: bold; }
+        
+        .cart-item-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px dashed #eee; }
+        .cart-item-info { flex-grow: 1; }
+        .cart-item-price { font-weight: 700; color: #2c3e50; }
+        .cart-item-controls { display: flex; align-items: center; }
+
+        /* --- ԶԱՄԲՅՈՒՂԻ ՆՈՐ ՈՃԵՐ --- */
+        .cart-modal { padding-top: 50px; } 
+        .options-title { display: block; font-weight: 700; margin: 15px 0 8px; color: #1a4d2e; font-size: 15px; }
+        .options-group { 
+            display: flex; gap: 10px; 
+            background: #f1f3f5; padding: 5px; border-radius: 12px;
+            margin-bottom: 15px;
+        }
+        .radio-input { display: none; }
+        .radio-label {
+            flex-grow: 1; text-align: center; padding: 10px 15px;
+            border-radius: 8px; cursor: pointer; transition: 0.2s;
+            font-weight: 600; font-size: 14px;
+        }
+        .radio-input:checked + .radio-label {
+            background: white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            color: #1a4d2e;
+        }
+        .comment-input { 
+            width: 100%; padding: 12px; border: 1px solid #ccc; 
+            border-radius: 12px; box-sizing: border-box; font-size: 15px;
+            margin-bottom: 20px;
+        }
+        .cart-info {
+            display: flex; justify-content: space-between; align-items: center;
+            padding-top: 15px; border-top: 1px solid #eee;
+        }
+        .cart-total { font-size: 24px; font-weight: 800; color: #1a4d2e; }
+        .clear-cart { 
+            color: #dc3545; font-size: 14px; cursor: pointer; 
+            text-decoration: underline; font-weight: 600;
+        }
+        .order-btn {
+            background: #ff6b6b; 
+            color: white; padding: 15px; width: 100%; border: none; 
+            border-radius: 16px; font-size: 18px; font-weight: bold;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="table-modal">
+        <div class="modal-content" style="max-width: 400px;">
+            <img src="https://scontent-vie1-1.xx.fbcdn.net/v/t39.30808-6/491981606_1167066425431381_1867155412865472325_n.jpg?_nc_cat=101&ccb=1-7&_nc_sid=6ee11a&_nc_ohc=WsP9xzJmtBkQ7kNvwEzKewM&_nc_oc=AdlQELkza5QYsV8g2UnOBxUDL6j4tYf87nSt7L-KECFBBm79lTJp5aWnWXUJ-PE88vk&_nc_zt=23&_nc_ht=scontent-vie1-1.xx&_nc_gid=L44x3jzd_p1ZWN1UMEoGxA&oh=00_AflIF-ODq5le8ByrQW8dneVa0dIYOaykiwtX81BC0veMbA&oe=6946DF76" class="logo-big">
+            <h2 id="lbl-welcome" style="margin:0; color:#1a4d2e;">Dolma Menu</h2>
+            <p id="lbl-enterTable" style="color:#888; margin-top:5px;">Խնդրում ենք ընտրել Ձեր սեղանի համարը</p>
+            
+            <div id="tableSelectionContainer" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 20px 0;">
+                </div>
+            
+        </div>
+    </div>
+
+    <header>
+        <div class="header-top">
+            <div class="logo-area">
+                <img src="https://scontent-vie1-1.xx.fbcdn.net/v/t39.30808-6/491981606_1167066425431381_1867155412865472325_n.jpg?_nc_cat=101&ccb=1-7&_nc_sid=6ee11a&_nc_ohc=WsP9xzJmtBkQ7kNvwEzKewM&_nc_oc=AdlQELkza5QYsV8g2UnOBxUDL6j4tYf87nSt7L-KECFBBm79lTJp5aWnWXUJ-PE88vk&_nc_zt=23&_nc_ht=scontent-vie1-1.xx&_nc_gid=L44x3jzd_p1ZWN1UMEoGxA&oh=00_AflIF-ODq5le8ByrQW8dneVa0dIYOaykiwtX81BC0veMbA&oe=6946DF76" class="logo-img-small">
+                <div class="logo-text">Dolma</div>
+            </div>
+            
+            <div style="display:flex; align-items:center; gap:10px;">
+                <div class="table-badge hidden" id="headerTableNum">#</div>
+                <div class="lang-switch">
+                    <button class="lang-btn active" onclick="setLang('hy')">🇦🇲</button>
+                    <button class="lang-btn" onclick="setLang('en')">🇺🇸</button>
+                    <button class="lang-btn" onclick="setLang('ru')">🇷🇺</button>
+                </div>
+            </div>
+        </div>
+        <div class="search-container">
+            <span class="search-icon">🔍</span>
+            <input type="text" class="search-input" id="searchInput" placeholder="Որոնել..." onkeyup="searchMenu()">
+        </div>
+    </header>
+
+    <div id="menu-screen">
+        <div class="categories-wrapper" id="catContainer"></div>
+        <div class="menu-container" id="menu"></div>
+        
+        <div class="mini-cart hidden" id="miniCart" onclick="openCart()">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <span>🛍️</span>
+                <span id="miniCartCount">0</span>
+            </div>
+            <div id="miniCartTotal">0 ֏</div>
+        </div>
+
+        <div class="cart-overlay" id="cartOverlay">
+            <div class="cart-modal">
+                <div class="close-cart" onclick="closeCart()">✕</div>
+                <h2 style="margin-top:0;">Ձեր պատվերը</h2>
+                
+                <div id="cartItemsContainer" style="margin-bottom: 20px;">
+                    </div>
+
+                <div>
+                    <span class="options-title" id="lbl-payMethod">Վճարման եղանակ</span>
+                    <div class="options-group">
+                        <input type="radio" name="payType" id="payCash" class="radio-input" value="cash" checked>
+                        <label for="payCash" class="radio-label" id="lbl-cash">💵 Կանխիկ</label>
+                        
+                        <input type="radio" name="payType" id="payCard" class="radio-input" value="card">
+                        <label for="payCard" class="radio-label" id="lbl-card">💳 Քարտ</label>
+                    </div>
+                </div>
+
+                <div>
+                    <span class="options-title" id="lbl-payTime">Երբ վճարել</span>
+                    <div class="options-group">
+                        <input type="radio" name="payTime" id="timeNow" class="radio-input" value="now">
+                        <label for="timeNow" class="radio-label" id="lbl-now">⚡ Հիմա</label>
+                        
+                        <input type="radio" name="payTime" id="timeLater" class="radio-input" value="later" checked>
+                        <label for="timeLater" class="radio-label" id="lbl-later">🏁 Վերջում</label>
+                    </div>
+                </div>
+                
+                <input type="text" class="comment-input" id="orderComment" placeholder="...">
+                
+                <div class="cart-info">
+                    <div>
+                        <span style="font-size:12px; color:#888;" id="lbl-total">Ընդամենը:</span>
+                        <div class="cart-total" id="totalPrice">0 ֏</div>
+                    </div>
+                    <div class="clear-cart" onclick="clearCart()" id="lbl-clear">Մաքրել</div>
+                </div>
+                
+                <button class="order-btn" onclick="sendOrder()"><span id="lbl-orderBtn">Պատվիրել</span></button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="status-screen" class="hidden">
+        <span class="status-icon">👨‍🍳</span>
+        <h2 id="lbl-successTitle">Ընդունված է!</h2>
+        <p id="lbl-successDesc" style="color:#888;">Խոհանոցը պատրաստում է:</p>
+        <div class="timer-box" id="timer">00:00</div>
+        
+        <div id="readyItemsList" style="text-align: left; margin-top: 20px; padding: 15px; background: #e8f5e9; border-radius: 12px; border: 1px solid #c8e6c9; display: none;">
+            <h3 style="color:#1a4d2e; margin: 0 0 10px 0;">✅ Ձեր պատրաստ ուտեստները</h3>
+            <ul id="readyItemsUl" style="list-style-type: none; padding: 0; margin: 0;"></ul>
+        </div>
+        
+        <div id="activeOrdersHistory" style="text-align: left; margin-top: 20px; padding: 15px; background: #f1f3f5; border-radius: 12px; border: 1px solid #dee2e6;">
+            <h3 style="color:#1a4d2e; margin: 0 0 10px 0;">🧾 Ձեր Ակտիվ Պատվերները</h3>
+            <div id="activeOrdersContainer">
+                </div>
+        </div>
+        <button class="action-btn btn-bill" onclick="openCustomModal('bill')" id="btn-bill">🧾 Խնդրել Հաշիվը</button>
+        <button class="action-btn btn-check" onclick="openCustomModal('status')" id="btn-status">❓ Պատրա՞ստ է</button>
+        <button class="action-btn btn-call" onclick="openCustomModal('call')" id="btn-call">🔔 Կանչել Մատուցողին</button>
+        <button class="action-btn btn-feedback" onclick="openFeedbackModal()">⭐ Թողնել Կարծիք</button>
+        <button class="action-btn btn-new" onclick="resetOrder()" id="btn-new">Նոր պատվեր</button>
+    </div>
+    
+    <div id="feedbackModal">
+        <div class="feedback-content">
+            <div class="close-cart" onclick="closeFeedbackModal()">✕</div>
+            <h2 style="color:#1a4d2e; margin-top:0;">⭐ Գնահատեք Սպասարկումը</h2>
+            
+            <div class="rating">
+                <input type="radio" id="star5" name="rating" value="5" />
+                <label for="star5" title="5 Stars"></label>
+                <input type="radio" id="star4" name="rating" value="4" />
+                <label for="star4" title="4 Stars"></label>
+                <input type="radio" id="star3" name="rating" value="3" />
+                <label for="star3" title="3 Stars"></label>
+                <input type="radio" id="star2" name="rating" value="2" />
+                <label for="star2" title="2 Stars"></label>
+                <input type="radio" id="star1" name="rating" value="1" />
+                <label for="star1" title="1 Star"></label>
+            </div>
+            
+            <textarea id="feedbackComment" class="comment-area" placeholder="Ձեր կարծիքը (Ընտրովի)..."></textarea>
+            
+            <button class="send-feedback-btn" onclick="submitFeedback()">Ուղարկել Կարծիքը</button>
+        </div>
+    </div>
+    
+    <div id="requestConfirmModal" class="cart-overlay hidden">
+        <div class="cart-modal" style="max-width: 400px; padding: 30px; border-radius: 12px;">
+            <div class="close-cart" onclick="closeCustomModal()">✕</div>
+            <h3 id="requestTitle" style="color:#1a4d2e; margin-top: 0;"></h3>
+            <p id="requestMessage" style="color:#888; margin-bottom: 25px;"></p>
+            
+            <button id="btnConfirmRequest" class="action-btn btn-bill" style="margin-bottom: 15px;"></button>
+            <button onclick="closeCustomModal()" class="action-btn btn-new" style="background:#f1f3f5; color:#333; margin-bottom: 0;">Չեղարկել</button>
+        </div>
+    </div>
+
+
+    <script>
+        // ==========================================
+        // 1. ԱՅՍՏԵՂ ԴԻՐ ՔՈ FIREBASE-Ի ՏՎՅԱԼՆԵՐԸ
+        // ==========================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyBzKoNezvEjHAkz7oqR5ZT2oYIzgaKS9HA",
+            authDomain: "dolmamenu.firebaseapp.com",
+            projectId: "dolmamenu",
+            storageBucket: "dolmamenu.firebasestorage.app",
+            messagingSenderId: "79065105652",
+            appId: "1:79065105652:web:58dc22269a56c6c4ca4aa1",
+            measurementId: "G-QX4RMX94QC"
+        };
+        // ==========================================
+
+        if(firebase.apps.length === 0) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.database();
+
+        let stopListStatus = {}; 
+        let allMenuItems = {};
+        let allCategories = { all: { hy: "Բոլորը", en: "All", ru: "Все" } };
+        
+        const uiText = { 
+            welcome: { hy: "Բարի Գալուստ", en: "Welcome", ru: "Добро пожаловать" }, 
+            enterTable: { hy: "Խնդրում ենք ընտրել Ձեր սեղանի համարը", en: "Please select your table number", ru: "Пожалуйста, выберите номер стола" }, 
+            start: { hy: "Սկսել", en: "Start", ru: "Начать" }, 
+            search: { hy: "Որոնել...", en: "Search...", ru: "Поиск..." }, 
+            add: { hy: "Ավելացնել", en: "Add", ru: "Добавить" }, 
+            payMethod: { hy: "Վճարման եղանակ", en: "Payment Method", ru: "Способ оплаты" }, 
+            cash: { hy: "💵 Կանխիկ", en: "💵 Cash", ru: "💵 Наличные" }, 
+            card: { hy: "💳 Քարտ", en: "💳 Card", ru: "💳 Карта" }, 
+            payTime: { hy: "Երբ վճարել", en: "When to pay", ru: "Когда платить" }, 
+            now: { hy: "⚡ Հիմա", en: "⚡ Now", ru: "⚡ Сейчас" }, 
+            later: { hy: "🏁 Վերջում", en: "🏁 Later", ru: "🏁 В конце" }, 
+            comment: { hy: "Նշումներ խոհանոցին...", en: "Note for kitchen...", ru: "Пожелания кухне..." }, 
+            total: { hy: "Ընդամենը:", en: "Total:", ru: "Итого:" }, 
+            clear: { hy: "Մաքրել", en: "Clear", ru: "Очистить" }, 
+            orderBtn: { hy: "Պատվիրել", en: "Order", ru: "Заказать" }, 
+            successTitle: { hy: "Ընդունված է!", en: "Accepted!", ru: "Принято!" }, 
+            successDesc: { hy: "Պատվերը փոխանցվեց:", en: "Order sent to kitchen.", ru: "Заказ отправлен." }, 
+            btnBill: { hy: "🧾 Խնդրել Հաշիվը", en: "🧾 Request Bill", ru: "🧾 Попросить счет" }, 
+            btnStatus: { hy: "❓ Պատրա՞ստ է", en: "❓ Is it ready?", ru: "❓ Готово?" }, 
+            btnCall: { hy: "🔔 Կանչել Մատուցողին", en: "🔔 Call Waiter", ru: "🔔 Позвать официанта" }, 
+            btnNew: { hy: "Նոր պատվեր", en: "New Order", ru: "Новый заказ" } 
+        };
+        
+        let currentLang = 'hy';
+        let cart = {}; 
+        let tableNumber = null;
+        let currentCategory = 'all';
+        let searchQuery = "";
+        
+        let browserId = localStorage.getItem('dolmaMenu_browserId');
+        if (!browserId) {
+            browserId = 'browser_' + Date.now() + Math.random().toString(36).substring(2, 9);
+            localStorage.setItem('dolmaMenu_browserId', browserId);
+        }
+
+        // --- ՍԿԶԲՆԱԿԱՆ ԲԵՌՆՈՒՄ ---
+        document.addEventListener('DOMContentLoaded', () => {
+            updateUIText();
+            listenForCategories(); 
+            
+            const savedTable = localStorage.getItem('dolmaMenu_table');
+            if (savedTable) {
+                checkAndResumeSession(savedTable); 
+            } else {
+                fetchAndRenderTables(); 
+            }
+        });
+
+        function listenForCategories() {
+            db.ref('categories').on('value', (snapshot) => {
+                const firebaseCats = snapshot.val() || {};
+                
+                const allCat = allCategories.all; 
+                allCategories = { all: allCat }; 
+                
+                for (let key in firebaseCats) {
+                    if (typeof firebaseCats[key] === 'object' && firebaseCats[key] !== null) {
+                        allCategories[key] = firebaseCats[key];
+                    }
+                }
+                
+                listenForMenuItems();
+            });
+        }
+        
+        function setLang(lang) {
+            currentLang = lang;
+            document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
+            document.querySelector(`.lang-switch button[onclick="setLang('${lang}')"]`).classList.add('active'); 
+            
+            updateUIText(); 
+            renderCategories(); 
+            renderMenu();
+        }
+
+        function listenForMenuItems() {
+            db.ref('menu_items').on('value', (snapshot) => {
+                allMenuItems = snapshot.val() || {};
+                renderCategories();
+                renderMenu(); 
+            });
+            listenForStopList();
+        }
+
+        function updateUIText() {
+            const t = uiText;
+            document.getElementById('lbl-welcome').innerText = t.welcome[currentLang] || t.welcome.hy;
+            document.getElementById('lbl-enterTable').innerText = t.enterTable[currentLang] || t.enterTable.hy;
+            document.getElementById('searchInput').placeholder = t.search[currentLang] || t.search.hy;
+            document.getElementById('lbl-payMethod').innerText = t.payMethod[currentLang] || t.payMethod.hy;
+            document.getElementById('lbl-cash').innerText = t.cash[currentLang] || t.cash.hy;
+            document.getElementById('lbl-card').innerText = t.card[currentLang] || t.card.hy;
+            document.getElementById('lbl-payTime').innerText = t.payTime[currentLang] || t.payTime.hy;
+            document.getElementById('lbl-now').innerText = t.now[currentLang] || t.now.hy;
+            document.getElementById('lbl-later').innerText = t.later[currentLang] || t.later.hy;
+            document.getElementById('orderComment').placeholder = t.comment[currentLang] || t.comment.hy;
+            document.getElementById('lbl-total').innerText = t.total[currentLang] || t.total.hy;
+            document.getElementById('lbl-clear').innerText = t.clear[currentLang] || t.clear.hy;
+            document.getElementById('lbl-orderBtn').innerText = t.orderBtn[currentLang] || t.orderBtn.hy;
+            document.getElementById('lbl-successTitle').innerText = t.successTitle[currentLang] || t.successTitle.hy;
+            document.getElementById('lbl-successDesc').innerText = t.successDesc[currentLang] || t.successDesc.hy;
+            document.getElementById('btn-bill').innerText = t.btnBill[currentLang] || t.btnBill.hy;
+            document.getElementById('btn-status').innerText = t.btnStatus[currentLang] || t.btnStatus.hy;
+            document.getElementById('btn-call').innerText = t.btnCall[currentLang] || t.btnCall.hy;
+            document.getElementById('btn-new').innerText = t.btnNew[currentLang] || t.btnNew.hy;
+        }
+
+
+        // --- ՍԵՂԱՆԻ ՍԵԱՆՍԻ ԿԱՌԱՎԱՐՈՒՄ ---
+        
+        function checkAndResumeSession(tNum) {
+             db.ref('table_sessions/' + tNum).once('value', (snapshot) => {
+                const session = snapshot.val();
+                
+                if (session && session.is_occupied && session.browser_id === browserId) {
+                    openSavedTableSession(tNum);
+                    
+                    const savedStatus = localStorage.getItem('dolmaMenu_screenStatus');
+                    if (savedStatus === 'status') {
+                        document.getElementById('menu-screen').classList.add('hidden');
+                        document.getElementById('status-screen').classList.remove('hidden');
+                        startTimer(); 
+                    } else {
+                        document.getElementById('menu-screen').classList.remove('hidden');
+                        document.getElementById('status-screen').classList.add('hidden');
+                    }
+                } else if (!session) {
+                    localStorage.removeItem('dolmaMenu_table');
+                    localStorage.removeItem('dolmaMenu_screenStatus'); 
+                    fetchAndRenderTables(); 
+                } else {
+                    fetchAndRenderTables(); 
+                }
+            });
+        }
+        
+        // --- ՍԵՂԱՆՆԵՐԻ ՑՈՒՑԱԴՐՄԱՆ ԼՈԳԻԿԱ (Ընտրություն) ---
+        function fetchAndRenderTables() {
+            document.getElementById('table-modal').classList.remove('hidden');
+
+            db.ref('table_sessions').on('value', (snapshot) => {
+                const sessions = snapshot.val() || {};
+                const container = document.getElementById('tableSelectionContainer');
+                container.innerHTML = '';
+                
+                for (let i = 1; i <= 20; i++) {
+                    const tNum = i.toString();
+                    const isOccupied = sessions[tNum] && sessions[tNum].is_occupied;
+                    let isMySession = false;
+
+                    if (isOccupied && sessions[tNum].browser_id === browserId) {
+                        isMySession = true;
+                    }
+
+                    let btnClass = 'table-select-btn';
+                    let btnText = tNum;
+                    let onclickFunc = `selectTable('${tNum}')`;
+
+                    if (isOccupied && !isMySession) {
+                        btnClass += ' locked';
+                        btnText += ` (Զբաղված)`;
+                        onclickFunc = ''; 
+                    } else if (isMySession) {
+                        btnClass += ' unlocked';
+                        btnText += ` ${tNum} (Ձերն է)`;
+                    } else {
+                        btnClass += ' unlocked';
+                    }
+
+                    container.innerHTML += `
+                        <button class="${btnClass}" onclick="${onclickFunc}" ${isOccupied && !isMySession ? 'disabled' : ''}>
+                            ${btnText}
+                        </button>
+                    `;
+                }
+            });
+        }
+        
+        function selectTable(tNum) {
+            tableNumber = tNum; 
+            
+            db.ref('table_sessions/' + tableNumber).once('value', (snapshot) => {
+                const session = snapshot.val();
+                
+                if (session && session.is_occupied) {
+                    if (session.browser_id === browserId) {
+                        localStorage.setItem('dolmaMenu_table', tableNumber);
+                        localStorage.setItem('dolmaMenu_screenStatus', 'menu'); 
+                        openSavedTableSession(tableNumber);
+                    } 
+                } else {
+                    localStorage.setItem('dolmaMenu_table', tableNumber);
+                    localStorage.setItem('dolmaMenu_screenStatus', 'menu'); 
+                    lockTable(tableNumber);
+                }
+            });
+        }
+        
+        function openSavedTableSession(tNum) {
+            tableNumber = tNum;
+            document.getElementById('table-modal').classList.add('hidden');
+            document.getElementById('headerTableNum').innerText = `#${tNum}`;
+            document.getElementById('headerTableNum').classList.remove('hidden');
+            listenForMessages(tNum);
+            listenForTableUpdates(tNum);
+        }
+        
+        function lockTable(tNum) {
+            const sessionData = {
+                is_occupied: true,
+                start_time: Date.now(),
+                table_number: tNum,
+                browser_id: browserId 
+            };
+            
+            db.ref('table_sessions/' + tNum).set(sessionData)
+            .then(() => {
+                document.getElementById('table-modal').classList.add('hidden');
+                document.getElementById('headerTableNum').innerText = `#${tNum}`;
+                document.getElementById('headerTableNum').classList.remove('hidden');
+                listenForMessages(tNum);
+                listenForTableUpdates(tNum);
+            })
+            .catch(error => {
+                alert("Սխալ սեղանը կողպելիս: " + error.message);
+                localStorage.removeItem('dolmaMenu_table'); 
+                localStorage.removeItem('dolmaMenu_screenStatus');
+                tableNumber = null;
+            });
+        }
+
+        // --- ՄԵՆՅՈՒԻ ԼՈԳԻԿԱՆ (Նույնն է) ---
+
+        function listenForStopList() {
+            db.ref('stop_status').on('value', (snapshot) => {
+                stopListStatus = snapshot.val() || {};
+                renderMenu();
+            });
+        }
+        
+        function renderCategories() {
+            const container = document.getElementById('catContainer');
+            container.innerHTML = '';
+            const existingCategories = new Set(['all']);
+            for (let id in allMenuItems) {
+                if (allMenuItems[id].category) {
+                    existingCategories.add(allMenuItems[id].category);
+                }
+            }
+            
+            for (let key in allCategories) { 
+                if(key === 'all' || existingCategories.has(key)) {
+                    const catName = allCategories[key][currentLang] || allCategories[key].hy || key; 
+                    container.innerHTML += `<span class="cat-btn ${key===currentCategory?'active':''}" onclick="changeCat('${key}')">${catName}</span>`;
+                }
+            }
+        }
+
+        function changeCat(cat) {
+            currentCategory = cat; document.getElementById('searchInput').value = ""; searchQuery = "";
+            renderCategories(); renderMenu();
+        }
+
+        function searchMenu() {
+            searchQuery = document.getElementById('searchInput').value.toLowerCase();
+            renderMenu();
+        }
+
+        function renderMenu() {
+            const container = document.getElementById('menu');
+            container.innerHTML = '';
+            
+            for (const id in allMenuItems) {
+                const p = allMenuItems[id];
+                
+                const pName = p.name[currentLang] || p.name.hy;
+                const pDesc = p.desc ? (p.desc[currentLang] || p.desc.hy) : ''; 
+
+                const isSoldOut = stopListStatus[id] && stopListStatus[id].soldOut;
+                let matchesCat = (currentCategory === 'all' || p.category === currentCategory);
+                let matchesSearch = pName.toLowerCase().includes(searchQuery);
+
+                if(searchQuery !== "") matchesCat = true;
+
+                if(matchesCat && matchesSearch) {
+                    let qty = cart[id] ? cart[id].qty : 0; 
+
+                    let btnHTML = '';
+                    if (isSoldOut) {
+                        btnHTML = `<button class="add-btn sold-out-btn" style="background:#f8d7da; color:#721c24;">Ավարտված է 🛑</button>`;
+                    } else if (qty === 0) {
+                        btnHTML = `<button class="add-btn" onclick="addItem('${id}')">${uiText.add[currentLang]}</button>`;
+                    } else {
+                        btnHTML = `<div class="qty-control">
+                                <button class="qty-btn" onclick="removeItemFromCart('${id}')">−</button>
+                                <span class="qty-val">${qty}</span>
+                                <button class="qty-btn" onclick="addItem('${id}')">+</button>
+                           </div>`;
+                    }
+                    
+                    const cardClass = isSoldOut ? 'product-card disabled' : 'product-card';
+
+                    container.innerHTML += `
+                        <div class="${cardClass}">
+                            <img src="${p.imgUrl}" class="product-img">
+                            <div class="product-info">
+                                <div>
+                                    <div class="product-title">${pName}</div>
+                                    <div class="product-desc">${pDesc}</div> 
+                                    <div class="product-price">${p.price} ֏</div>
+                                </div>
+                                <div class="action-area">${btnHTML}</div>
+                            </div>
+                        </div>`;
+                }
+            }
+        }
+        
+        // --- ԶԱՄԲՅՈՒՂԻ ԼՈԳԻԿԱ (Նույնն է) ---
+
+        function addItem(id) {
+            const p = allMenuItems[id];
+            
+            if (!cart[id]) {
+                 cart[id] = { 
+                    qty: 0, 
+                    price: p.price,
+                    baseId: id,
+                    name: p.name.hy,
+                    desc: p.desc ? p.desc.hy : '' 
+                };
+            }
+            cart[id].qty += 1;
+            
+            renderMenu();
+            updateCart();
+        }
+
+        function removeItemFromCart(id) {
+             if(cart[id]) {
+                cart[id].qty -= 1;
+                if(cart[id].qty <= 0) delete cart[id];
+             }
+             renderMenu();
+             updateCart();
+        }
+
+        function renderCartModalItems() {
+            const container = document.getElementById('cartItemsContainer');
+            container.innerHTML = '';
+            
+            for (let key in cart) {
+                const item = cart[key];
+                
+                container.innerHTML += `
+                    <div class="cart-item-row">
+                        <div class="cart-item-info">
+                            <div style="font-weight: 600;">${item.name}</div>
+                            <div style="font-size: 11px; color: #888;">${item.desc.substring(0, 50)}...</div>
+                        </div>
+                        <div class="cart-item-controls">
+                            <div class="qty-control" style="margin-right: 15px;">
+                                <button class="qty-btn" style="width: 25px; height: 25px;" onclick="removeItemFromCart('${key}')">−</button>
+                                <span class="qty-val" style="width: 20px;">${item.qty}</span>
+                                <button class="qty-btn" style="width: 25px; height: 25px;" onclick="addItem('${key}')">+</button>
+                            </div>
+                            <div class="cart-item-price">
+                                ${(item.price * item.qty).toLocaleString()} ֏
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            if (Object.keys(cart).length === 0) {
+                 container.innerHTML = '<p style="text-align: center; color: #888;">Զամբյուղը դատարկ է։</p>';
+            }
+        }
+
+        function updateCart() {
+            let total = 0, count = 0;
+            for(let key in cart) {
+                total += cart[key].price * cart[key].qty;
+                count += cart[key].qty;
+            }
+            const mini = document.getElementById('miniCart');
+            if(count > 0) {
+                mini.classList.remove('hidden');
+                document.getElementById('miniCartCount').innerText = `(${count})`;
+                document.getElementById('miniCartTotal').innerText = `${total.toLocaleString()} ֏`;
+            } else {
+                mini.classList.add('hidden');
+                closeCart();
+            }
+            document.getElementById('totalPrice').innerText = `${total.toLocaleString()} ֏`;
+            
+            if (document.getElementById('cartOverlay').classList.contains('open')) {
+                renderCartModalItems();
+            }
+        }
+
+        function openCart() { document.getElementById('cartOverlay').classList.add('open'); renderCartModalItems(); }
+        function closeCart() { document.getElementById('cartOverlay').classList.remove('open'); }
+        function clearCart() { cart = {}; renderMenu(); updateCart(); closeCart(); }
+
+
+        // --- ՈՒՂԱՐԿԵԼ ---
+        function sendOrder() {
+            let comment = document.getElementById('orderComment').value;
+            let payMethodType = document.querySelector('input[name="payType"]:checked').value;
+            let payTiming = document.querySelector('input[name="payTime"]:checked').value;
+            
+            let orderItems = [];
+            for(let key in cart) {
+                const item = cart[key];
+                orderItems.push({ name: item.name, qty: item.qty, price: item.price });
+            }
+
+            if(orderItems.length === 0) { alert('Զամբյուղը դատարկ է։'); return; }
+
+            const orderData = {
+                table: tableNumber, items: orderItems, comment: comment,
+                payMethod: payMethodType === 'cash' ? 'Կանխիկ' : 'Քարտ',
+                payTime: payTiming === 'now' ? 'Հիմա' : 'Վերջում',
+                timestamp: Date.now(), status: 'new'
+            };
+
+            const btn = document.querySelector('.order-btn'); btn.innerText = 'Ուղարկվում է...';
+            db.ref('orders').push(orderData)
+            .then(() => {
+                clearCart(); 
+                
+                localStorage.setItem('dolmaMenu_screenStatus', 'status'); 
+
+                document.getElementById('miniCart').classList.add('hidden');
+                document.getElementById('menu-screen').classList.add('hidden');
+                document.getElementById('status-screen').classList.remove('hidden');
+                startTimer(); 
+                btn.innerHTML = '<span id="lbl-orderBtn">Պատվիրել</span>';
+            })
+            .catch(err => { alert("Սխալ: " + err.message); btn.innerHTML = '<span id="lbl-orderBtn">Պատվիրել</span>'; });
+        }
+
+
+        // --- FEEDBACK LOGIC (Նույնն է) ---
+        function openFeedbackModal() {
+            document.getElementById('feedbackModal').classList.add('open');
+        }
+
+        function closeFeedbackModal() {
+             document.getElementById('feedbackModal').classList.remove('open');
+        }
+
+        function submitFeedback() {
+            const ratingInput = document.querySelector('input[name="rating"]:checked');
+            const rating = ratingInput ? parseInt(ratingInput.value) : 0;
+            const comment = document.getElementById('feedbackComment').value.trim();
+
+            if (rating === 0) {
+                alert("Խնդրում ենք դնել գոնե մեկ աստղ:");
+                return;
+            }
+
+            const feedbackData = {
+                table: tableNumber,
+                rating: rating,
+                comment: comment,
+                timestamp: Date.now()
+            };
+
+            db.ref('feedback').push(feedbackData)
+            .then(() => {
+                alert(`Շնորհակալություն Ձեր կարծիքի համար (${rating} աստղ):`);
+                closeFeedbackModal();
+                resetOrder();
+            })
+            .catch(error => {
+                alert("Սխալ: Կարծիքը չուղարկվեց: " + error.message);
+            });
+        }
+
+
+        // --- CUSTOM REQUEST MODAL LOGIC (ՈՒՂՂՎԱԾ) ---
+
+        let currentAction = null;
+
+        function openCustomModal(type) {
+            currentAction = type;
+            const modal = document.getElementById('requestConfirmModal');
+            const titleElement = document.getElementById('requestTitle');
+            const messageElement = document.getElementById('requestMessage');
+            const confirmBtn = document.getElementById('btnConfirmRequest');
+            
+            // ՑՈՒՑԱԴՐԵԼ ՄՈԴԱԼԸ
+            modal.classList.remove('hidden');
+            modal.classList.add('open'); 
+
+            if (type === 'bill') {
+                titleElement.innerText = uiText.btnBill[currentLang] + '...';
+                messageElement.innerText = "Հաշվի հարցումը կուղարկվի Կասսա: Ցանկանու՞մ եք շարունակել:";
+                confirmBtn.innerText = '🧾 Խնդրել Հաշիվը';
+                confirmBtn.onclick = () => { requestBillConfirm(); closeCustomModal(); };
+            } else if (type === 'call') {
+                titleElement.innerText = uiText.btnCall[currentLang] + '...';
+                messageElement.innerText = "Մատուցողի կանչը կուղարկվի: Խնդրում ենք սպասել:";
+                confirmBtn.innerText = '🔔 Կանչել Մատուցողին';
+                confirmBtn.onclick = () => { callWaiterConfirm(); closeCustomModal(); };
+            } else if (type === 'status') {
+                titleElement.innerText = uiText.btnStatus[currentLang];
+                messageElement.innerText = "Հարցումը կուղարկվի Խոհանոց: Ցանկանու՞մ եք իմանալ կարգավիճակը:";
+                confirmBtn.innerText = '❓ Հարցնել Պատվերը';
+                confirmBtn.onclick = () => { askStatusConfirm(); closeCustomModal(); };
+            }
+        }
+
+        function closeCustomModal() {
+            const modal = document.getElementById('requestConfirmModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('open');
+            currentAction = null;
+        }
+
+        // --- CONFIRMATION LOGIC ---
+        
+        // 1. ՀԱՇԻՎԸ
+        function requestBillConfirm() {
+             let payMethod = document.querySelector('input[name="payType"]:checked').value;
+             let methodText = payMethod === 'cash' ? 'Կանխիկ' : 'Քարտ';
+             
+             db.ref('orders').push({ 
+                 table: tableNumber, 
+                 items: [{name: "🧾 ԽՆԴՐՈՒՄ ԵՆ ՀԱՇԻՎԸ", qty: 1}], 
+                 comment: "Վճարում են՝ " + methodText, 
+                 timestamp: Date.now(),
+                 destination: 'cashier',
+                 status_kitchen_closed: false // Փակ չէ
+             }).then(() => {
+                 // Թարմացնում ենք table_sessions-ը՝ ցույց տալու համար հարցումը
+                 db.ref('table_sessions/' + tableNumber).update({
+                     pending_request: 'Հաշիվ', 
+                     request_time: Date.now()
+                 });
+                 alert("Հաշիվը փոխանցվեց");
+             });
+        }
+        
+        // 2. ՄԱՏՈՒՑՈՂԻ ԿԱՆՉԸ
+        function callWaiterConfirm() {
+             db.ref('orders').push({ 
+                 table: tableNumber, 
+                 items: [{name: "🔔 ԿԱՆՉՈՒՄ ԵՆ ՄԱՏՈՒՑՈՂԻՆ", qty: 1}], 
+                 timestamp: Date.now(),
+                 destination: 'cashier',
+                 status_kitchen_closed: false
+             }).then(() => {
+                 // Թարմացնում ենք table_sessions-ը՝ ցույց տալու համար հարցումը
+                 db.ref('table_sessions/' + tableNumber).update({
+                     pending_request: 'Կանչ', 
+                     request_time: Date.now()
+                 });
+                 alert("Կանչը գրանցվեց");
+             });
+        }
+        
+        // 3. ՊԱՏՎԵՐԻ ԿԱՐԳԱՎԻՃԱԿԸ
+        function askStatusConfirm() { 
+             db.ref('orders').push({ 
+                 table: tableNumber, 
+                 items: [{name: "❓ ՀԱՐՑՆՈՒՄ ԵՆ ՊԱՏՎԵՐԸ", qty: 1}], 
+                 timestamp: Date.now(),
+                 destination: 'kitchen' 
+             }).then(() => alert("Հարցումը ուղարկվեց"));
+        }
+        
+        
+        // --- ՄՆԱՑԱԾ ՖՈՒՆԿՑԻԱՆԵՐԸ ---
+        
+        function listenForMessages(tNum) {
+            db.ref('messages/' + tNum).on('value', (snapshot) => {
+                const data = snapshot.val();
+                if(data && data.text) {
+                    alert("👨‍🍳 ԽՈՀԱՆՈՑԻՑ ՆԱՄԱԿ:\n\n" + data.text);
+                    db.ref('messages/' + tNum).remove();
+                }
+            });
+        }
+        
+        // --- ԼՍԵԼ ԵՎ ՑՈՒՑԱԴՐԵԼ ՊԱՏՎԵՐՆԵՐԸ ---
+        function listenForTableUpdates(tNum) {
+            // Լսում ենք բոլոր պատվերները, որոնք կապված են տվյալ սեղանի հետ
+            db.ref('orders').orderByChild('table').equalTo(tNum).on('value', (snapshot) => {
+                const orders = snapshot.val() || {};
+                renderReadyItems(orders); // Պատրաստ ապրանքների ցուցակ
+                renderActiveOrdersHistory(orders); // Ակտիվ Պատվերների Պատմություն
+            });
+        }
+
+        // --- ՊԱՏՐԱՍՏ ՈՒՏԵՍՏՆԵՐԻ ՑՈՒՑԱԴՐՈՒՄ ---
+        function renderReadyItems(orders) {
+            const list = document.getElementById('readyItemsUl');
+            const container = document.getElementById('readyItemsList');
+            list.innerHTML = '';
+            let totalReadyCount = 0;
+
+            for (const key in orders) {
+                const order = orders[key];
+                // Պատրաստ է, բայց դեռ չի փակվել
+                if (order.status_kitchen_done && !order.status_kitchen_closed) {
+                    order.items.forEach(item => {
+                        // Ֆիլտրում ենք service հարցումները
+                        if (!item.name.includes("ՀԱՇԻՎ") && !item.name.includes("ԿԱՆՉ") && !item.name.includes("ՀԱՐՑՆՈՒՄ")) {
+                            list.innerHTML += `<li style="font-weight: 600; padding: 3px 0; color:#333;">
+                                ${item.name} (x${item.qty})
+                            </li>`;
+                            totalReadyCount++;
+                        }
+                    });
+                }
+            }
+
+            if (totalReadyCount > 0) {
+                container.style.display = 'block';
+            } else {
+                container.style.display = 'none';
+            }
+        }
+
+        // --- ԱԿՏԻՎ ՊԱՏՎԵՐՆԵՐԻ ՊԱՏՄՈՒԹՅԱՆ ՑՈՒՑԱԴՐՈՒՄ (ՆՈՐ) ---
+        function renderActiveOrdersHistory(orders) {
+            const container = document.getElementById('activeOrdersContainer');
+            container.innerHTML = '';
+            const activeOrders = [];
+
+            for (const key in orders) {
+                const order = orders[key];
+                // Ցուցադրում ենք բոլոր պատվերները, որոնք ունեն ապրանքներ և դեռ փակված չեն
+                if (!order.status_kitchen_closed) {
+                    const isServiceRequest = order.items.some(item => 
+                        item.name.includes("ՀԱՇԻՎ") || item.name.includes("ԿԱՆՉ") || item.name.includes("ՀԱՐՑՆՈՒՄ")
+                    );
+
+                    // Ցուցադրում ենք միայն ապրանքային պատվերները
+                    if (!isServiceRequest) {
+                        activeOrders.push({ key, order });
+                    }
+                }
+            }
+            
+            if (activeOrders.length === 0) {
+                 container.innerHTML = '<p style="color:#555;">Դուք դեռ ակտիվ պատվերներ չունեք։</p>';
+                 return;
+            }
+            
+            // Դասավորում ենք ամենավերջինը՝ վերևում
+            activeOrders.sort((a, b) => b.order.timestamp - a.order.timestamp);
+
+            activeOrders.forEach(item => {
+                const order = item.order;
+                const time = new Date(order.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const status = order.status_kitchen_done ? '✅ Պատրաստ է' : '⏳ Ընթացքի մեջ';
+                
+                const itemsList = order.items.map(i => {
+                    return `<span style="font-size: 13px; color: #555;">${i.name} (x${i.qty})</span>`;
+                }).join('<br>');
+                
+                container.innerHTML += `
+                    <div style="padding: 10px; border-bottom: 1px dashed #dee2e6; margin-bottom: 5px;">
+                        <div style="display: flex; justify-content: space-between; font-weight: bold;">
+                            <span>${status}</span>
+                            <span style="font-weight: normal; font-size: 12px;">${time}</span>
+                        </div>
+                        <div style="margin-top: 5px;">
+                            ${itemsList}
+                        </div>
+                    </div>
+                `;
+            });
+        }
+        
+        function startTimer() {
+            const start = new Date();
+            const timerInterval = setInterval(() => {
+                let diff = Math.floor((new Date() - start) / 1000);
+                let m = Math.floor(diff / 60).toString().padStart(2,'0');
+                let s = (diff % 60).toString().padStart(2,'0');
+                document.getElementById('timer').innerText = `${m}:${s}`;
+
+                if (document.getElementById('status-screen').classList.contains('hidden')) {
+                    clearInterval(timerInterval);
+                }
+            }, 1000);
+        }
+        
+        // --- ՊԱՏՎԵՐԻ ՇԱՐՈՒՆԱԿՈՒՄ (ՆՈՐ ՖԻՔՍ) ---
+        function resetOrder() { 
+            if(!confirm("Ցանկանու՞մ եք անցնել նոր պատվերներ ավելացնելուն։ (Ձեր նախորդ պատվերը մնում է ընդունված)")) {
+                return; 
+            }
+            
+            // 1. Մաքրել զամբյուղի տվյալները (որպեսզի նորը հավաքեն)
+            cart = {};
+            updateCart();
+            
+            // 2. Փոխել Էկրանը Մենյուի վրա
+            localStorage.setItem('dolmaMenu_screenStatus', 'menu'); 
+            document.getElementById('status-screen').classList.add('hidden');
+            document.getElementById('menu-screen').classList.remove('hidden');
+
+            // 3. Թարմացնել մենյուն (ցուցադրելով զրոյական քանակները)
+            renderMenu(); 
+        }
+        
+        document.querySelector('.lang-switch button[onclick="setLang(\'hy\')"]').click(); 
+    </script>
+</body>
+</html>
