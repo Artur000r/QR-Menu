@@ -326,6 +326,14 @@
             firebase.initializeApp(firebaseConfig);
         }
         const db = firebase.database();
+        
+
+        // --- SaaS ԼՈԳԻԿԱ. Ստանում ենք ռեստորանի ID-ն URL-ից ---
+        const urlParams = new URLSearchParams(window.location.search);
+        const restaurantId = urlParams.get('rest') || 'default_restaurant'; // Եթե ID չկա, կօգտագործի default_restaurant
+
+        // Այսուհետ բոլոր ref-երը պետք է օգտագործեն restaurantId
+        const restaurantRef = db.ref('restaurants/' + restaurantId);
 
         let stopListStatus = {}; 
         let allMenuItems = {};
@@ -381,7 +389,7 @@
         });
 
         function listenForCategories() {
-            db.ref('categories').on('value', (snapshot) => {
+            restaurantRef.child('categories').on('value', (snapshot) => {
                 const firebaseCats = snapshot.val() || {};
                 
                 const allCat = allCategories.all; 
@@ -408,7 +416,7 @@
         }
 
         function listenForMenuItems() {
-            db.ref('menu_items').on('value', (snapshot) => {
+            restaurantRef.child('menu').on('value', (snapshot) => {
                 allMenuItems = snapshot.val() || {};
                 renderCategories();
                 renderMenu(); 
@@ -443,7 +451,7 @@
         // --- ՍԵՂԱՆԻ ՍԵԱՆՍԻ ԿԱՌԱՎԱՐՈՒՄ ---
         
         function checkAndResumeSession(tNum) {
-             db.ref('table_sessions/' + tNum).once('value', (snapshot) => {
+             restaurantRef.child('table_sessions/' + tNum).once('value', (snapshot) => {
                 const session = snapshot.val();
                 
                 if (session && session.is_occupied && session.browser_id === browserId) {
@@ -472,7 +480,7 @@
         function fetchAndRenderTables() {
             document.getElementById('table-modal').classList.remove('hidden');
 
-            db.ref('table_sessions').on('value', (snapshot) => {
+            restaurantRef.child('table_sessions/' + tNum)('value', (snapshot) => {
                 const sessions = snapshot.val() || {};
                 const container = document.getElementById('tableSelectionContainer');
                 container.innerHTML = '';
@@ -760,7 +768,7 @@
             };
 
             const btn = document.querySelector('.order-btn'); btn.innerText = 'Ուղարկվում է...';
-            db.ref('orders').push(orderData)
+            restaurantRef.child('orders').push(orderData)
             .then(() => {
                 clearCart(); 
                 

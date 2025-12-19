@@ -144,6 +144,27 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
+        // --- SaaS ԼՈԳԻԿԱ ---
+        const urlParams = new URLSearchParams(window.location.search);
+        const restaurantId = urlParams.get('rest') || 'default_restaurant';
+        const restaurantRef = db.ref('restaurants/' + restaurantId);
+
+        // Լսում ենք պատվերները միայն այս ռեստորանի համար
+        function listenOrders() {
+            restaurantRef.child('orders').on('value', (snapshot) => {
+                const data = snapshot.val() || {};
+                renderOrders(data);
+            });
+        }
+
+        // Կարգավիճակի թարմացումը նույնպես դառնում է դինամիկ
+        function updateOrderStatus(orderId, newStatus) {
+            restaurantRef.child('orders/' + orderId).update({
+                status_kitchen: newStatus,
+                status_ready_at: newStatus === 'ready' ? Date.now() : null
+            });
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             listenForOrders();
             // ԾԱՆՈՒՑՈՒՄՆԵՐԻ ԹՈՒՅԼՏՎՈՒԹՅԱՆ ՀԱՐՑՈՒՄ

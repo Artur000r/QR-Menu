@@ -291,6 +291,36 @@
             '9999': 'manager'
         };
 
+        // --- SaaS ԼՈԳԻԿԱ ---
+        const urlParams = new URLSearchParams(window.location.search);
+        const restaurantId = urlParams.get('rest') || 'default_restaurant';
+        const restaurantRef = db.ref('restaurants/' + restaurantId);
+
+        function fetchData() {
+            // Կատեգորիաներ
+            restaurantRef.child('categories').once('value', (snap) => { /*...*/ });
+            
+            // Մենյու
+            restaurantRef.child('menu').on('value', (snap) => {
+                menuItems = snap.val() || {};
+                renderStopList();
+            });
+
+            // Պատվերներ (ստատիստիկայի համար)
+            restaurantRef.child('orders').on('value', (snap) => {
+                allOrders = snap.val() || {};
+                calculateStats();
+                filterAndRender();
+            });
+        }
+
+        // Ապրանք ավելացնելիս այն կգնա ճիշտ տեղում
+        function addNewProduct() {
+            const newId = restaurantRef.child('menu').push().key;
+            const productData = { /* քո տվյալները */ };
+            restaurantRef.child('menu/' + newId).set(productData);
+        }
+
         // --- ԿՈԴԻ ՍԿԻԶԲ ---
 
         document.addEventListener('DOMContentLoaded', () => {
