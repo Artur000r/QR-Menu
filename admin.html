@@ -267,40 +267,30 @@
             apiKey: "AIzaSyBzKoNezvEjHAkz7oqR5ZT2oYIzgaKS9HA",
             authDomain: "dolmamenu.firebaseapp.com",
             projectId: "dolmamenu",
+            databaseURL: "https://dolmamenu-default-rtdb.firebaseio.com",
             storageBucket: "dolmamenu.firebasestorage.app",
             messagingSenderId: "79065105652",
-            appId: "1:79065105652:web:58dc22269a56c6c4ca4aa1",
-            measurementId: "G-QX4RMX94QC"
+            appId: "1:79065105652:web:58dc22269a56c6c4ca4aa1"
         };
-        // ==========================================
 
-        firebase.initializeApp(firebaseConfig);
+        if (firebase.apps.length === 0) firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
+        const urlParams = new URLSearchParams(window.location.search);
+        const restaurantId = urlParams.get('rest') || 'default_restaurant';
+        const restaurantRef = db.ref('restaurants/' + restaurantId);
 
-
-        // Ցուցադրենք ID-ն վերևում, որ իմանաք՝ որ ռեստորանի մեջ եք
-        document.querySelector('h1').innerHTML += ` <span style="font-size:14px; color:#555;">(${restaurantId})</span>`;
-        // -------------------------------------------
-        
+        // ==========================================
+        // 2. ԳԼՈԲԱԼ ՓՈՓՈԽԱԿԱՆՆԵՐ (Տեղափոխեք ԱՅՍՏԵՂ)
+        // ==========================================
+        // Սրանք պետք է լինեն ֆունկցիաներից ՎԵՐԵՎ, որպեսզի ReferenceError չտա
+        const ROLES = { '2024': 'cashier', '9999': 'manager' };
+        let currentRole = null;  // <--- Ահա այս տողը պետք է լինի այստեղ
         let allOrders = {}; 
         let menuItems = {}; 
         let allFeedbacks = {};
         let categoriesMap = {};
-        
-        let currentEditingProductId = null; 
-        let currentRole = null; 
-
-        // Դերերի մուտքի կոդերը
-        const ROLES = {
-            '2024': 'cashier',
-            '9999': 'manager'
-        };
-
-        // --- SaaS ԼՈԳԻԿԱ ---
-        const urlParams = new URLSearchParams(window.location.search);
-        const restaurantId = urlParams.get('rest') || 'default_restaurant';
-        const restaurantRef = db.ref('restaurants/' + restaurantId);
+        let currentEditingProductId = null;
 
         function fetchData() {
             // Կատեգորիաներ
@@ -329,77 +319,62 @@
 
         // --- ԿՈԴԻ ՍԿԻԶԲ ---
 
-        document.addEventListener('DOMContentLoaded', () => {
-            document.getElementById('loginModal').style.display = 'flex';
+       document.addEventListener('DOMContentLoaded', () => {
+            // 1. Ցուցադրում ենք ռեստորանի ID-ն մուտքի պատուհանում և վերևում
+            const restNameDisplay = document.getElementById('restNameDisplay');
+            const headerRestId = document.getElementById('headerRestId');
             
-            const today = new Date().toISOString().slice(0, 10);
-            document.getElementById('filterDate').value = today;
-            
-            setupCategoryListener();
-            setupStopListListener();
-            
-            document.getElementById('editImg').addEventListener('input', (e) => {
-                document.getElementById('editImgPreview').src = e.target.value;
-            });
-            
-            // ԾԱՆՈՒՑՈՒՄՆԵՐԻ ԹՈՒՅԼՏՎՈՒԹՅԱՆ ՀԱՐՑՈՒՄ
-            if ('Notification' in window) {
-                Notification.requestPermission();
-            }
+            if (restNameDisplay) restNameDisplay.innerText = `ID: ${restaurantId}`;
+            if (headerRestId) headerRestId.innerText = `(${restaurantId})`;
 
-            // --- ԱՎԵԼԱՑՐԵՔ ՍԱ (Enter կոճակի համար) ---
+            // 2. Ակտիվացնում ենք Enter կոճակը Login-ի դաշտում
             const loginInput = document.getElementById('loginCode');
             if (loginInput) {
-                loginInput.addEventListener('keyup', function(event) {
-                    if (event.key === 'Enter' || event.keyCode === 13) {
-                        event.preventDefault(); // Կանխում ենք այլ գործողությունները
-                        attemptLogin();
+                // Ֆոկուս ենք անում, որ միանգամից գրվի
+                loginInput.focus();
+                
+                loginInput.addEventListener('keyup', (event) => {
+                    if (event.key === 'Enter') {
+                        event.preventDefault(); // Կանխում ենք էջի թարմացումը
+                        attemptLogin();         // Կանչում ենք մուտքի ֆունկցիան
                     }
                 });
             }
-            // ----------------------------------------
 
-            document.getElementById('loginModal').style.display = 'flex';
-            
-            // ԼՍՈՒՄ ԵՆՔ ՊԱՏՐԱՍՏ ԿԱՐԳԱՎԻՃԱԿԻ ՓՈՓՈԽՈՒԹՅՈՒՆՆԵՐԸ 
-            restaurantRef.child('orders').on('child_changed', (snapshot) => {
-                const data = snapshot.val();
-                if (data.status_kitchen_done && !data.status_kitchen_closed) {
-                     // Ծանուցում միայն Cashier-ին, երբ Խոհանոցը պատրաստ է նշում ուտեստը
-                     if (currentRole === 'cashier') {
-                         playSound();
-                         showNotification(`✅ ՍԵՂԱՆ #${data.table} -ի ՊԱՏՎԵՐԸ ՊԱՏՐԱՍՏ Է!`, 'cashier');
-                     }
-                }
-            });
-            
-            // Սկզբնական ֆիլտրի կարգավորում
-            toggleFilterInput();
+            // 3. Համոզվում ենք, որ մուտքի պատուհանը բաց է սկզբում
+            const loginModal = document.getElementById('loginModal');
+            if (loginModal) {
+                loginModal.style.display = 'flex';
+                loginModal.classList.add('open');
+            }
         });
         
         // --- ԼՈԳԻՆԻ ԼՈԳԻԿԱ ---
         function attemptLogin() {
             const code = document.getElementById('loginCode').value.trim();
-            const role = ROLES[code];
-
+            // Հիմա ROLES-ը հասանելի է, քանի որ այն վերևում է
+            const role = ROLES[code]; 
+            
             if (role) {
                 currentRole = role;
-                document.getElementById('currentUserRole').innerText = `Դեր: ${role.toUpperCase()}`;
+                document.getElementById('loginModal').style.display = 'none';
+                document.getElementById('mainContent').classList.remove('hidden');
                 
-                document.getElementById('loginModal').style.display = 'none'; 
-                document.getElementById('mainContent').classList.remove('hidden'); 
+                // Թարմացնում ենք դերը էկրանին
+                const roleText = (role === 'manager') ? 'Մենեջեր' : 'Գանձապահ';
+                document.getElementById('currentUserRole').innerText = roleText;
                 
-                filterSections(role);
-                fetchData(); 
-                fetchActiveTables(); 
-                
-                if (role === 'cashier') {
-                    listenForCriticalOrders(); 
-                    listenForReadyOrders();    
+                // Ցույց ենք տալիս ճիշտ բաժինները
+                if(role === 'manager') {
+                    document.querySelectorAll('.role-manager').forEach(el => el.style.display = 'block');
+                } else {
+                    document.querySelectorAll('.role-cashier').forEach(el => el.style.display = 'block');
                 }
-                
+
+                fetchData();
+                if(role === 'cashier') fetchActiveTables();
             } else {
-                alert("Սխալ կոդ։ Խնդրում ենք փորձել նորից:");
+                alert("Սխալ կոդ! Փորձեք 2024 կամ 9999");
             }
         }
         
@@ -510,13 +485,29 @@
         function addNewCategory() {
             const name = document.getElementById('newCatName').value.trim();
             const id = document.getElementById('newCatId').value.trim().toLowerCase();
-            if (!name || !id) { alert("Լրացրեք անունը և ID-ն։"); return; }
-            if (categoriesMap[id]) { alert("Այս ID-ն արդեն գոյություն ունի։"); return; }
-            db.ref('categories/' + id).set({ hy: name }).then(() => { alert(`Կատեգորիա "${name}"-ը ավելացվեց։`); document.getElementById('newCatName').value = ''; document.getElementById('newCatId').value = ''; });
+
+            if (!name || !id) {
+                alert("Լրացրեք անունը և ID-ն։");
+                return;
+            }
+
+            if (categoriesMap[id]) {
+                alert("Այս ID-ն արդեն գոյություն ունի։");
+                return;
+            }
+
+            // ՓՈԽՎԱԾ Է: db.ref -> restaurantRef.child
+            restaurantRef.child('categories/' + id).set({ hy: name }).then(() => {
+                alert(`Կատեգորիա "${name}"-ը ավելացվեց։`);
+                document.getElementById('newCatName').value = '';
+                document.getElementById('newCatId').value = '';
+            });
         }
+
         function removeCategory(id) {
             if (confirm(`Վստա՞հ եք, որ ուզում եք ջնջել ${categoriesMap[id]}-ը։`)) {
-                 db.ref('categories/' + id).remove().then(() => alert('Ջնջված է։'));
+                // ՓՈԽՎԱԾ Է: db.ref -> restaurantRef.child
+                restaurantRef.child('categories/' + id).remove().then(() => alert('Ջնջված է։'));
             }
         }
         
@@ -1262,29 +1253,67 @@
         
         // --- ՊԱՏՐԱՍՏ ՈՒՏԵՍՏՆԵՐԻ ԼՈԳԻԿԱ (ԿԱՍՍԱՅԻ ՀԱՄԱՐ) ---
 
+        // --- ԱՎԵԼԱՑՐԵՔ ՍԱ admin.html-ի ՆԵՐՔԵՎՈՒՄ ---
+
         function listenForReadyOrders() {
+            // ՈՒՇԱԴՐՈՒԹՅՈՒՆ: Օգտագործում ենք restaurantRef
             restaurantRef.child('orders').on('value', (snapshot) => {
-                const readyItems = [];
-                snapshot.forEach(childSnapshot => {
-                    const key = childSnapshot.key;
-                    const data = childSnapshot.val();
-                    
-                    // Ստուգում ենք՝ արդյոք պատվերը պատրաստ է Խոհանոցի կողմից, 
-                    // և դեռևս չի փակվել (այսինքն՝ չի մատուցվել մատուցողի կողմից)։
-                    if (data.status_kitchen_done && !data.status_kitchen_closed) {
-                        
-                        // Ֆիլտրում ենք service հարցումները
-                        const isServiceRequest = data.items.some(item => 
-                            item.name.includes("ՀԱՇԻՎ") || item.name.includes("ԿԱՆՉ") || item.name.includes("ՀԱՐՑՆՈՒՄ")
-                        );
-                        
-                        if (!isServiceRequest) {
-                            readyItems.push({ key, data });
-                        }
-                    }
-                });
+                const orders = snapshot.val() || {};
+                const container = document.getElementById('readyOrdersList');
                 
-                renderReadyOrders(readyItems);
+                if (!container) return;
+                container.innerHTML = ''; // Մաքրում ենք հինը
+
+                let hasReadyItems = false;
+
+                for (let key in orders) {
+                    const order = orders[key];
+
+                    // Ցույց ենք տալիս միայն այն պատվերները, որոնք:
+                    // 1. Պատրաստ են (status_kitchen_done = true)
+                    // 2. Դեռ փակված չեն մատուցողի կողմից (status_kitchen_closed = false կամ չկա)
+                    if (order.status_kitchen_done && !order.status_kitchen_closed) {
+                        hasReadyItems = true;
+                        
+                        // Հաշվում ենք ուտեստների անունները
+                        let itemsList = '';
+                        if (order.items) {
+                            order.items.forEach(item => {
+                                itemsList += `<li>${item.name.hy || item.name} (x${item.qty})</li>`;
+                            });
+                        }
+
+                        container.innerHTML += `
+                            <div style="background: white; border-left: 5px solid #28a745; padding: 15px; margin-bottom: 10px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+                                <div style="display:flex; justify-content:space-between; align-items:center;">
+                                    <h3 style="margin:0; color:#28a745;">✅ ՍԵՂԱՆ #${order.table}</h3>
+                                    <button onclick="closeKitchenOrder('${key}')" style="background: #28a745; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-weight:bold;">
+                                        Վերցնել / Փակել
+                                    </button>
+                                </div>
+                                <ul style="margin: 10px 0 0 20px; padding:0; color: #555;">
+                                    ${itemsList}
+                                </ul>
+                                <div style="font-size: 12px; color: #888; margin-top:5px; text-align:right;">
+                                    ${new Date(order.kitchen_done_time).toLocaleTimeString()}
+                                </div>
+                            </div>
+                        `;
+                    }
+                }
+
+                if (!hasReadyItems) {
+                    container.innerHTML = '<p style="color:#1a4d2e; text-align:center;">Այս պահին պատրաստ ուտեստներ չկան:</p>';
+                }
+            });
+        }
+
+        // Այս ֆունկցիան փակում է պատվերը (երբ մատուցողը վերցնում է այն)
+        function closeKitchenOrder(key) {
+            if(!confirm("Վերցրե՞ցիք պատվերը։ Այն կանհետանա ցուցակից։")) return;
+            
+            restaurantRef.child('orders/' + key).update({
+                status_kitchen_closed: true
             });
         }
         

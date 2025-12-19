@@ -347,23 +347,34 @@
         //  ԳՈՐԾՈՂՈՒԹՅՈՒՆՆԵՐ (ՊԱՏՎԵՐԸ ՊԱՏՐԱՍՏ Է)
         // ---------------------------------------------------
 
+        // --- ՓՈԽԱՐԻՆԵՔ ԱՅՍ ՖՈՒՆԿՑԻԱՆ ՁԵՐ ԿՈԴՈՒՄ ---
+
         function markOrderAsDone(key) {
             if (confirm("Վստա՞հ եք, որ այս պատվերը պատրաստ է և կարող է մատուցվել։")) {
                 const button = document.querySelector(`.order-card[data-order-key="${key}"] .action-button`);
-                button.innerText = 'Թարմացվում է...';
-                button.disabled = true;
+                if(button) {
+                    button.innerText = 'Թարմացվում է...';
+                    button.disabled = true;
+                }
 
-                // Թարմացնում ենք Firebase-ը
-                db.ref('orders/' + key).update({
+                // ՈՒՂՂՈՒՄ: db.ref-ի փոխարեն օգտագործում ենք restaurantRef
+                // Հինը: db.ref('orders/' + key).update(...)  <-- ՍԽԱԼ ԷՐ
+                // Նորը:
+                restaurantRef.child('orders/' + key).update({
                     status_kitchen_done: true,
                     kitchen_done_time: Date.now()
                 })
                 .then(() => {
-                    alert(`Պատվերը #${key} նշվեց որպես ՊԱՏՐԱՍՏ։`);
+                    // Հաջողություն! (alert պետք չէ, UI-ը ինքն իրեն կթարմանա)
+                    console.log(`Պատվերը #${key} պատրաստ է։`);
                 })
                 .catch(error => {
-                    alert('Սխալ պատվերը թարմացնելիս։');
+                    alert('Սխալ պատվերը թարմացնելիս։ Խնդրում ենք թարմացնել էջը։');
                     console.error(error);
+                    if(button) {
+                        button.innerText = 'Փորձել Կրկին';
+                        button.disabled = false;
+                    }
                 });
             }
         }
