@@ -292,47 +292,35 @@
         let categoriesMap = {};
         let currentEditingProductId = null;
 
+        // ✅ ՃԻՇՏ ՏԱՐԲԵՐԱԿԸ
         function fetchData() {
-            console.log("Fetching data for:", restaurantId);
+            console.log("Բեռնում ենք տվյալները...");
 
-            // 1. Կատեգորիաների լսում
-            restaurantRef.child('categories').on('value', (snap) => {
-                const data = snap.val() || {};
-                categoriesMap = {};
-                for(let id in data) categoriesMap[id] = data[id].hy;
-                renderCategorySelect();
-                renderEditCategorySelect();
-            });
-            
-            // 2. Մենյուի լսում
-            restaurantRef.child('menu').on('value', (snap) => {
-                menuItems = snap.val() || {};
-                renderStopList();
-            });
-
-            // 3. Պատվերների լսում (Ստատիստիկա + Աղյուսակ + Պատրաստի Ուտեստներ)
             restaurantRef.child('orders').on('value', (snap) => {
                 allOrders = snap.val() || {};
                 
-                // Թարմացնում ենք ստատիստիկան
-                calculateStats();
+                // Եթե ունես այս ֆունկցիաները, կանչիր
+                if(typeof calculateStats === 'function') calculateStats();
+                if(typeof filterAndRender === 'function') filterAndRender();
                 
-                // Թարմացնում ենք աղյուսակը
-                filterAndRender();
-                
-                // Եթե գանձապահ է, թարմացնում ենք նաև "Պատրաստ է" ցուցակը
-                if (currentRole === 'cashier') {
+                // Մատուցողի համար՝ ցույց տալ պատրաստի պատվերները
+                if (currentRole === 'cashier' && typeof renderReadyOrders === 'function') {
                     renderReadyOrders();
                 }
             });
 
-            // 4. Կարծիքների լսում (Մենեջերի համար)
-            if(currentRole === 'manager') {
-                restaurantRef.child('feedback').on('value', (snapshot) => {
-                    allFeedbacks = snapshot.val() || {};
-                    // renderFeedbacks(); // Եթե ունես այդ ֆունկցիան
-                });
-            }
+            // Մենյուն և կատեգորիաները
+            restaurantRef.child('menu').on('value', (snap) => {
+                menuItems = snap.val() || {};
+                if(typeof renderStopList === 'function') renderStopList();
+            });
+            
+            restaurantRef.child('categories').on('value', (snap) => {
+                const d = snap.val() || {};
+                categoriesMap = {};
+                for(let k in d) categoriesMap[k] = d[k].hy;
+                if(typeof renderCategorySelect === 'function') renderCategorySelect();
+            });
         }
 
         // Ապրանք ավելացնելիս այն կգնա ճիշտ տեղում
@@ -936,104 +924,78 @@
         }
 
         // --- ՖԻԼՏՐԱՑԻԱ ԵՎ ՑՈՒՑԱԴՐՈՒՄ (ՇՐՋԱՆԱՌՈՒԹՅԱՆ ՃԻՇՏ ՀԱՇՎԱՐԿ) ---
+        // --- ԱՅՍ ՖՈՒՆԿՑԻԱՆ ՑՈՒՅՑ Է ՏԱԼԻՍ ՆԵՐՔԵՎԻ ԱՂՅՈՒՍԱԿԸ ---
+
         function filterAndRender() {
+            const tbody = document.getElementById('openOrdersTableBody');
+            const closedTbody = document.getElementById('closedOrdersTableBody');
+            
+            if (!tbody || !closedTbody) return;
+
+            tbody.innerHTML = '';
+            closedTbody.innerHTML = '';
+
+            // Ֆիլտրման տրամաբանություն (Այսօր/Բոլորը)
             const filterType = document.getElementById('filterType').value;
-            let ordersToProcess = allOrders; 
-
-            // ԿԱՐԵՎՈՐ. Ամսաթվով ֆիլտրում
-            if (filterType === 'today' || filterType === 'date') {
-                // ordersByDate ֆունկցիան արդեն ֆիլտրում է
-                 ordersToProcess = ordersByDate(allOrders, document.getElementById('filterDate').value);
-            } 
-            // Եթե filterType === 'all', ordersToProcess-ը մնում է allOrders
-
-            // --- ՇՐՋԱՆԱՌՈՒԹՅԱՆ ՀԱՇՎԱՐԿ ---
-            let totalSales = 0; 
-            let totalCount = 0; 
-            let cashSales = 0;   
-            let cardSales = 0;   
+            const filterDate = document.getElementById('filterDate').value;
             
-            const ordersGroupedByTable = {};
-            const closedOrders = [];
-            const serviceRequests = [];
+            // Տեսակավորում ենք (նորերը վերևում)
+            const sortedKeys = Object.keys(allOrders).sort((a,b) => allOrders[b].timestamp - allOrders[a].timestamp);
 
+            for (let key of sortedKeys) {
+                const o = allOrders[key];
+                const dateObj = new Date(o.timestamp || Date.now());
+                const dateStr = dateObj.toISOString().slice(0, 10);
 
-            for (const key in ordersToProcess) {
-                const order = ordersToProcess[key];
-                
-                if (!order.items || order.items.length === 0) continue; 
-                
-                // ԿԱՐԵՎՈՐ. Բացահայտել Service Requests-ը
-                const isServiceRequest = order.items[0].name.includes("ԽՆԴՐՈՒՄ ԵՆ ՀԱՇԻՎԸ") || order.items[0].name.includes("ԿԱՆՉՈՒՄ ԵՆ ՄԱՏՈՒՑՈՂԻՆ");
+                // Ստուգում ենք ֆիլտրը
+                if (filterType === 'today' && dateStr !== new Date().toISOString().slice(0, 10)) continue;
+                if (filterType === 'date' && dateStr !== filterDate) continue;
 
-                if (isServiceRequest) {
-                     // Service հարցումները չեն մասնակցում շրջանառությանը կամ աղյուսակներին
-                     serviceRequests.push(order); 
-                     continue;
+                // Հաշվում ենք գումարը
+                let totalSum = 0;
+                if (o.items) o.items.forEach(i => totalSum += (i.price * i.qty));
+
+                // --- ՎՃԱՐՄԱՆ ԿԱՐԳԱՎԻՃԱԿԸ ---
+                let paymentStatusHTML = `<span style="color:#dc3545; font-weight:bold;">Չվճարված</span>`;
+                let rowClass = "";
+
+                if (o.payment_confirmed) {
+                    paymentStatusHTML = `<span style="color:#28a745; font-weight:bold;">✅ Վճարված</span>`;
+                    rowClass = "style='background-color:#f8fff9'"; // Թեթև կանաչ ֆոն
                 }
 
+                // Խոհանոցի կարգավիճակը
+                let kitchenStatus = o.status_kitchen_done ? 
+                    '<span style="color:green">✅ Պատրաստ</span>' : 
+                    '<span style="color:orange">⏳ Եփվում է</span>';
 
-                let orderTotal = order.items.reduce((sum, item) => sum + (item.price * item.qty), 0);
+                // --- ՑՈՒՑԱԴՐՈՒՄ ---
                 
-                // Վիճակագրության համար հաշվարկում ենք ՄԻԱՅՆ հաստատված վճարումները
-                const isConfirmedForStats = order.payment_confirmed; 
-                
-                if (isConfirmedForStats) {
-                    totalSales += orderTotal; 
-                    totalCount++; 
-                    
-                    if (order.payMethod === 'Կանխիկ') {
-                        cashSales += orderTotal;
-                    } else if (order.payMethod === 'Քարտ') {
-                        cardSales += orderTotal;
-                    }
+                // Եթե պատվերը ՓԱԿՎԱԾ է (մատուցողը փակել է) -> Գնում է ներքևի աղյուսակ
+                if (o.status_kitchen_closed) {
+                    closedTbody.innerHTML += `
+                        <tr>
+                            <td>${dateObj.toLocaleTimeString()}</td>
+                            <td>Սեղան ${o.table}</td>
+                            <td>${totalSum} ֏</td>
+                            <td>${o.payMethod}</td>
+                            <td>${o.payment_confirmed ? 'Այո' : 'Ոչ'}</td>
+                        </tr>`;
+                } 
+                // Եթե ԲԱՑ է -> Գնում է վերևի աղյուսակ
+                else {
+                    tbody.innerHTML += `
+                        <tr ${rowClass}>
+                            <td><b style="font-size:16px;">${o.table}</b></td>
+                            <td>${totalSum} ֏</td>
+                            <td>${o.payMethod}</td>
+                            <td>${kitchenStatus}</td>
+                            <td>
+                                ${paymentStatusHTML} <br>
+                                ${!o.payment_confirmed ? `<button onclick="confirmPayment(${o.table})" style="margin-top:5px; font-size:11px;">Հաստատել</button>` : ''}
+                            </td>
+                        </tr>`;
                 }
-                
-                // ԲԱԺԱՆՈՒՄ ԵՆՔ ԸՍՏ ԿԱՐԳԱՎԻՃԱԿԻ
-                if (order.status_kitchen_closed) {
-                    // Փակված պատվերները գնում են պատմություն (Ստորին աղյուսակ)
-                    closedOrders.push({
-                        ...order,
-                        orderKey: key,
-                        total: orderTotal,
-                        confirmed: order.payment_confirmed
-                    });
-                } else {
-                    // Ակտիվ/բաց պատվերներ (Վերին աղյուսակ)
-                    
-                    const currentGroup = ordersGroupedByTable[order.table];
-                    
-                    if (!currentGroup) {
-                         ordersGroupedByTable[order.table] = {
-                            totalAmount: 0,
-                            batches: [],
-                            paymentInfo: { method: order.payMethod, time: order.payTime },
-                            confirmed: order.payment_confirmed, 
-                        };
-                    }
-
-                    ordersGroupedByTable[order.table].totalAmount += orderTotal;
-                    ordersGroupedByTable[order.table].batches.push(order); 
-                    
-                    // ԹԱՐՄԱՑՆՈՒՄ ԵՆՔ ԽՄԲԻ ՎՃԱՐՄԱՆ ԿԱՐԳԱՎԻՃԱԿԸ
-                    // Եթե գոնե մեկ բաց պատվեր չի հաստատվել, ապա խումբը համարվում է չհաստատված
-                    if (!order.payment_confirmed) {
-                         ordersGroupedByTable[order.table].confirmed = false;
-                    }
-                }
-            }
-            
-            // Վիճակագրության թարմացումը UI-ում
-            document.getElementById('totalSales').innerText = `${totalSales.toLocaleString()} ֏`;
-            document.getElementById('totalCount').innerText = totalCount;
-            document.getElementById('avgCheck').innerText = totalCount > 0 ? `${Math.round(totalSales / totalCount).toLocaleString()} ֏` : '0 ֏';
-            document.getElementById('cashSales').innerText = `${cashSales.toLocaleString()} ֏`;
-            document.getElementById('cardSales').innerText = `${cardSales.toLocaleString()} ֏`;
-
-
-            if (currentRole === 'cashier') {
-                renderOpenOrdersTable(ordersGroupedByTable); 
-                renderClosedOrdersTable(closedOrders);       
             }
         }
 
@@ -1330,13 +1292,10 @@
 
         // Այս ֆունկցիան փակում է պատվերը (երբ մատուցողը վերցնում է այն)
         function closeKitchenOrder(key) {
-            if(!confirm("Վերցրե՞ցիք պատվերը։ Այն կհեռացվի «Պատրաստ է» ցուցակից։")) return;
+            if(!confirm("Վերցրե՞ցիք պատվերը։ Այն կհեռացվի ցուցակից։")) return;
             
-            // Թարմացնում ենք բազայում
             restaurantRef.child('orders/' + key).update({
                 status_kitchen_closed: true
-            }).then(() => {
-                console.log("Order closed by waiter");
             });
         }
         
@@ -1345,18 +1304,18 @@
             const container = document.getElementById('readyOrdersList');
             if (!container) return;
             
-            container.innerHTML = ''; // Մաքրում ենք
+            container.innerHTML = ''; // Մաքրում ենք հինը
             let hasReady = false;
 
             for (let key in allOrders) {
                 const order = allOrders[key];
                 
-                // Ցույց ենք տալիս, եթե խոհանոցը պատրաստել է (status_kitchen_done)
-                // ԵՎ մատուցողը դեռ չի վերցրել (!status_kitchen_closed)
+                // Ցույց ենք տալիս, եթե խոհանոցը պատրաստել է (done) 
+                // ԵՎ մատուցողը դեռ չի վերցրել (closed)
                 if (order.status_kitchen_done && !order.status_kitchen_closed) {
                     hasReady = true;
                     
-                    // Ուտեստների ցուցակը
+                    // Հավաքում ենք ուտեստների անունները
                     let itemsHtml = '';
                     if (order.items) {
                         order.items.forEach(item => {
@@ -1365,25 +1324,25 @@
                     }
 
                     container.innerHTML += `
-                        <div style="background: white; border-left: 5px solid #28a745; padding: 15px; margin-bottom: 10px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+                        <div style="background: white; border-left: 5px solid #28a745; padding: 15px; margin-bottom: 10px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); animation: popIn 0.3s ease-out;">
                             <div style="display:flex; justify-content:space-between; align-items:center;">
                                 <h3 style="margin:0; color:#28a745;">✅ ՍԵՂԱՆ #${order.table}</h3>
                                 <button onclick="closeKitchenOrder('${key}')" style="background: #28a745; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-weight:bold;">
                                     Վերցնել
                                 </button>
                             </div>
-                            <ul style="margin: 10px 0 0 20px; padding:0; color: #555;">
+                            <ul style="margin: 10px 0 0 20px; padding:0; color: #555; font-size: 15px;">
                                 ${itemsHtml}
                             </ul>
+                            <div style="text-align:right; font-size:12px; color:#999; margin-top:5px;">
+                                ${new Date(order.kitchen_done_time || Date.now()).toLocaleTimeString()}
+                            </div>
                         </div>`;
-                    
-                    // Ձայնային ազդանշան (եթե նոր է)
-                    // playSound(); 
                 }
             }
 
             if (!hasReady) {
-                container.innerHTML = '<p style="color:#1a4d2e; text-align:center;">Այս պահին պատրաստ ուտեստներ չկան:</p>';
+                container.innerHTML = '<p style="color:#1a4d2e; text-align:center; padding:10px;">Այս պահին պատրաստ ուտեստներ չկան:</p>';
             }
         }
         

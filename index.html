@@ -507,24 +507,43 @@
             });
         }
         
-        function selectTable(tNum) {
-            tableNumber = tNum; 
+        // --- ՏԵՂԱԴՐԻՐ index.html-ում (փոխարինիր հին selectTable-ը) ---
+
+        function selectTable(num) {
+            console.log("Փորձում ենք ընտրել սեղան:", num);
             
-            db.ref('table_sessions/' + tableNumber).once('value', (snapshot) => {
-                const session = snapshot.val();
-                
-                if (session && session.is_occupied) {
-                    if (session.browser_id === browserId) {
-                        localStorage.setItem('dolmaMenu_table', tableNumber);
-                        localStorage.setItem('dolmaMenu_screenStatus', 'menu'); 
-                        openSavedTableSession(tableNumber);
-                    } 
-                } else {
-                    localStorage.setItem('dolmaMenu_table', tableNumber);
-                    localStorage.setItem('dolmaMenu_screenStatus', 'menu'); 
-                    lockTable(tableNumber);
-                }
-            });
+            if (!num) {
+                alert("Սխալ՝ սեղանի համարը բացակայում է։");
+                return;
+            }
+
+            // Հիշում ենք սեղանի համարը
+            tableNumber = num;
+            
+            // Թարմացնում ենք էկրանը (UI)
+            const headerBadge = document.getElementById('headerTableNum');
+            if(headerBadge) {
+                headerBadge.innerText = '#' + num;
+                headerBadge.classList.remove('hidden');
+            }
+
+            // Փակում ենք մոդալ պատուհանը
+            const modal = document.getElementById('table-modal');
+            if(modal) {
+                modal.style.display = 'none'; // Ապահովության համար
+                modal.classList.add('hidden');
+            }
+
+            // Ուղարկում ենք բազա (SaaS տարբերակ)
+            // Եթե restaurantRef-ը չլինի, սա կգրի console-ում
+            if (typeof restaurantRef !== 'undefined') {
+                restaurantRef.child('table_sessions/' + num).update({
+                    is_occupied: true,
+                    last_active: Date.now()
+                }).catch(err => console.error("Բազայի սխալ:", err));
+            } else {
+                alert("Խնդիր: restaurantRef-ը գոյություն չունի։ Թարմացրեք էջը։");
+            }
         }
         
         function openSavedTableSession(tNum) {
