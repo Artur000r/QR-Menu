@@ -276,6 +276,12 @@
 
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
+
+
+
+        // Ցուցադրենք ID-ն վերևում, որ իմանաք՝ որ ռեստորանի մեջ եք
+        document.querySelector('h1').innerHTML += ` <span style="font-size:14px; color:#555;">(${restaurantId})</span>`;
+        // -------------------------------------------
         
         let allOrders = {}; 
         let menuItems = {}; 
@@ -340,6 +346,20 @@
             if ('Notification' in window) {
                 Notification.requestPermission();
             }
+
+            // --- ԱՎԵԼԱՑՐԵՔ ՍԱ (Enter կոճակի համար) ---
+            const loginInput = document.getElementById('loginCode');
+            if (loginInput) {
+                loginInput.addEventListener('keyup', function(event) {
+                    if (event.key === 'Enter' || event.keyCode === 13) {
+                        event.preventDefault(); // Կանխում ենք այլ գործողությունները
+                        attemptLogin();
+                    }
+                });
+            }
+            // ----------------------------------------
+
+            document.getElementById('loginModal').style.display = 'flex';
             
             // ԼՍՈՒՄ ԵՆՔ ՊԱՏՐԱՍՏ ԿԱՐԳԱՎԻՃԱԿԻ ՓՈՓՈԽՈՒԹՅՈՒՆՆԵՐԸ 
             restaurantRef.child('orders').on('child_changed', (snapshot) => {
@@ -430,8 +450,8 @@
             }
             
             // Գործողությունները կատարվում են անկախ
-            const deleteOrders = db.ref('orders').remove();
-            const deleteFeedback = db.ref('feedback').remove();
+            const deleteOrders = restaurantRef.child('orders').remove();
+            const deleteFeedback = restaurantRef.child('feedback').remove();
             const deleteSessions = restaurantRef.child('table_sessions').remove();
 
             Promise.all([deleteOrders, deleteFeedback, deleteSessions])
@@ -447,7 +467,7 @@
         
         // --- ԿԱՏԵԳՈՐԻԱՆԵՐԻ ԿԱՌԱՎԱՐՈՒՄ (Մենեջեր) ---
         function setupCategoryListener() {
-            db.ref('categories').on('value', (snapshot) => {
+            restaurantRef.child('categories').on('value', (snapshot) => {
                 const data = snapshot.val() || {};
                 categoriesMap = {};
                 if (data) {
@@ -689,16 +709,15 @@
                 btn.disabled = true;
             }
             
-            db.ref('stop_status/' + id).set({
-                soldOut: newStatus
-            }).catch(error => { 
-                alert("Սխալ։ Կարգավիճակը չփոխվեց։"); 
+                restaurantRef.child('stop_status/' + id).set({ soldOut: !isCurrentlySoldOut })
+            .catch(error => {
+                alert("Սխալ։ Կարգավիճակը չփոխվեց։");
             });
         }
         
         // --- ԱԿՏԻՎ ՍԵՂԱՆՆԵՐԻ ԿԱՌԱՎԱՐՈՒՄ (Կասսա) ---
         function fetchActiveTables() {
-            db.ref('table_sessions').on('value', (snapshot) => {
+            restaurantRef.child('table_sessions').on('value', (snapshot) => {
                 const data = snapshot.val() || {};
                 if(currentRole === 'cashier') {
                     renderActiveTables(data);
@@ -770,33 +789,38 @@
             }
         }
         
+        // Գտեք closeTableFromAdmin ֆունկցիան և փոխարինեք սրանով
         function closeTableFromAdmin(tableNum) {
             if(!confirm(`Վստա՞հ եք, որ Սեղան ${tableNum}-ը մաքրվել է և կարող է ազատվել նոր հաճախորդի համար։`)) {
                 return;
             }
-            
+
+            // Օգտագործում ենք restaurantRef
             restaurantRef.child('orders').once('value').then(snapshot => {
                 const orders = snapshot.val() || {};
                 const updates = {};
                 
                 for (const key in orders) {
                     const order = orders[key];
+                    // Փակում ենք չփակված պատվերները
                     if (order.table == tableNum && !order.status_kitchen_closed) {
-                        // Փակում ենք նաև չփակված պատվերները սեղանի փակման ժամանակ
-                        updates[`/orders/${key}/status_kitchen_closed`] = true;
+                        // ՈՒՇԱԴՐՈՒԹՅՈՒՆ: Հասցեն առանց սկզբնական "/" նշանի
+                        updates[`orders/${key}/status_kitchen_closed`] = true;
                     }
                 }
                 
-                updates[`/table_sessions/${tableNum}`] = null; 
-                
-                db.ref().update(updates)
-                .then(() => {
-                    alert(`Սեղան ${tableNum}-ի սեանսը փակվեց, և այն ազատ է։`);
-                    fetchData(); 
-                })
-                .catch(error => {
-                    alert("Սխալ սեանսը փակելիս: " + error.message);
-                });
+                // Զրոյացնում ենք սեսիան
+                updates[`table_sessions/${tableNum}`] = null;
+
+                // ԿԱՐԵՎՈՐ: update-ը անում ենք restaurantRef-ի վրա
+                restaurantRef.update(updates)
+                    .then(() => {
+                        alert(`Սեղան ${tableNum}-ի սեանսը փակվեց, և այն ազատ է։`);
+                        // fetchData() պետք չէ կանչել, եթե on() լիսեներ ունեք, բայց կարող եք թողնել
+                    })
+                    .catch(error => {
+                        alert("Սխալ սեանսը փակելիս: " + error.message);
+                    });
             });
         }
         
@@ -817,7 +841,7 @@
         
         // --- ԿԱՐԾԻՔՆԵՐ ԵՎ ՎԻՃԱԿԱԳՐՈՒԹՅՈՒՆ ---
         function fetchFeedbacks() {
-             db.ref('feedback').once('value').then(snapshot => {
+             restaurantRef.child('feedback').once('value').then(snapshot => {
                 allFeedbacks = snapshot.val() || {};
                 renderFeedbacks();
             }).catch(error => { console.error("Feedback Error:", error); });
@@ -1067,53 +1091,36 @@
         }
 
         // --- ՎՃԱՐՈՒՄԸ ՀԱՍՏԱՏԵԼՈՒ ՖՈՒՆԿՑԻԱ (Սեղանի Բոլոր Չհաստատված Պատվերների համար) ---
-        function confirmPaymentForTable(tableNum) {
-             if (!confirm(`Վստա՞հ եք, որ Սեղան ${tableNum}-ի բոլոր չհաստատված պատվերների վճարումը ստացված է։`)) {
-                 return;
-             }
-             
-             // Քանի որ orderByChild-ը չի աշխատում, մենք կկարդանք բոլոր պատվերները և կֆիլտրենք JS-ում:
-             // ԿԱՐԵՎՈՐ: Մենք աշխատում ենք Firebase-ից ստացված տվյալների հետ (allOrders),
-             // բայց անհրաժեշտ է կատարել ուղիղ կանչ, եթե կոդը չի թարմացնում։
-             
-             db.ref('orders').once('value')
-             .then(snapshot => {
-                const firebaseUpdates = {}; 
-                
-                snapshot.forEach(childSnapshot => {
-                    const key = childSnapshot.key;
-                    const data = childSnapshot.val();
+        // Գտեք confirmPayment ֆունկցիան և փոխարինեք սրանով
+        function confirmPayment(tableNum) {
+            if(!confirm(`Հաստատե՞լ Սեղան ${tableNum}-ի վճարումը։`)) return;
 
-                    // 1. Ստուգում ենք, որ դա մեր սեղանն է
-                    // 2. Ստուգում ենք, որ դա ապրանքային պատվեր է և դեռ հաստատված չէ
-                    if (data.table == tableNum && !data.payment_confirmed && data.items && data.items.length > 0) {
-                        
-                        // ԲԱՑԱՐՁԱԿ ՈՒՂԻ
-                        firebaseUpdates[`orders/${key}/payment_confirmed`] = true;
-                        firebaseUpdates[`orders/${key}/payment_confirmed_time`] = Date.now();
+            // ՈՒՇԱԴՐՈՒԹՅՈՒՆ: Օգտագործում ենք restaurantRef
+            restaurantRef.child('orders').once('value').then(snapshot => {
+                const orders = snapshot.val() || {};
+                const updates = {};
+                let found = false;
+
+                for(let key in orders) {
+                    const data = orders[key];
+                    // Փնտրում ենք այդ սեղանի չվճարված պատվերները
+                    if (data.table == tableNum && !data.payment_confirmed && data.items) {
+                        // ՈՒՇԱԴՐՈՒԹՅՈՒՆ: Հասցեն պետք է լինի առանց սկզբնական "/" նշանի
+                        updates[`orders/${key}/payment_confirmed`] = true;
+                        updates[`orders/${key}/payment_confirmed_time`] = Date.now();
+                        found = true;
                     }
-                });
-
-                if (Object.keys(firebaseUpdates).length > 0) {
-                    // ԱՅՍ ԳՈՐԾՈՂՈՒԹՅՈՒՆԸ ԱՊԱՀՈՎՈՒՄ Է ԹԱՐՄԱՑՈՒՄԸ
-                    return db.ref().update(firebaseUpdates); 
                 }
-                
-                // Եթե այս սեղանի համար բաց պատվերներ չեն գտնվել
-                alert(`Սեղան ${tableNum}-ի համար չհաստատված պատվերներ չգտնվեցին։`);
-                return Promise.resolve();
-             })
-             .then(() => {
-                 // Քանի որ թարմացումը կատարվում է, filterAndRender-ը ավտոմատ կաշխատի։
-                 // Լրացուցիչ alert-ը կհանենք, քանի որ այն արդեն տեղի է ունեցել վերևում
-                 
-                 // Անհրաժեշտ է լրացուցիչ թարմացում կատարել, եթե Firebase-ի լսողը ձախողվի
-                 fetchData(); 
-             })
-             .catch(error => {
-                alert(`Սխալ վճարումը հաստատելիս: ${error.message}`);
-                console.error("Payment Confirmation Error:", error);
-             });
+
+                if (found) {
+                    // ԿԱՐԵՎՈՐ: update-ը անում ենք restaurantRef-ի վրա
+                    return restaurantRef.update(updates).then(() => {
+                        // Հաջողություն
+                    });
+                } else {
+                    alert(`Սեղան ${tableNum}-ի համար չհաստատված պատվերներ չգտնվեցին։`);
+                }
+            }).catch(err => alert("Սխալ: " + err.message));
         }
         
         // --- ԿՐԻՏԻԿԱԿԱՆ ՀԱՐՑՈՒՄՆԵՐԻ ԼՈԳԻԿԱ (ԿԱՍՍԱՅԻ ՀԱՄԱՐ) ---
@@ -1131,7 +1138,7 @@
 
         // Ֆունկցիա, որը լսում է բոլոր պատվերները և ֆիլտրում հարցումները
         function listenForCriticalOrders() {
-            db.ref('orders').on('value', (snapshot) => {
+            restaurantRef.child('orders').on('value', (snapshot) => {
                 const requests = [];
                 let hasNewRequest = false;
                 
@@ -1223,7 +1230,7 @@
                  return;
              }
              
-             db.ref('orders').once('value', (snapshot) => {
+             restaurantRef.child('orders').once('value', (snapshot) => {
                  const updates = {};
                  snapshot.forEach(childSnapshot => {
                      const data = childSnapshot.val();
@@ -1256,7 +1263,7 @@
         // --- ՊԱՏՐԱՍՏ ՈՒՏԵՍՏՆԵՐԻ ԼՈԳԻԿԱ (ԿԱՍՍԱՅԻ ՀԱՄԱՐ) ---
 
         function listenForReadyOrders() {
-            db.ref('orders').on('value', (snapshot) => {
+            restaurantRef.child('orders').on('value', (snapshot) => {
                 const readyItems = [];
                 snapshot.forEach(childSnapshot => {
                     const key = childSnapshot.key;

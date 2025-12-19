@@ -799,7 +799,7 @@
                 timestamp: Date.now()
             };
 
-            db.ref('feedback').push(feedbackData)
+            restaurantRef.child('feedback').push(feedbackData)
             .then(() => {
                 alert(`Շնորհակալություն Ձեր կարծիքի համար (${rating} աստղ):`);
                 closeFeedbackModal();
@@ -858,7 +858,7 @@
              let payMethod = document.querySelector('input[name="payType"]:checked').value;
              let methodText = payMethod === 'cash' ? 'Կանխիկ' : 'Քարտ';
              
-             db.ref('orders').push({ 
+             restaurantRef.child('orders').push({ 
                  table: tableNumber, 
                  items: [{name: "🧾 ԽՆԴՐՈՒՄ ԵՆ ՀԱՇԻՎԸ", qty: 1}], 
                  comment: "Վճարում են՝ " + methodText, 
@@ -877,7 +877,7 @@
         
         // 2. ՄԱՏՈՒՑՈՂԻ ԿԱՆՉԸ
         function callWaiterConfirm() {
-             db.ref('orders').push({ 
+             restaurantRef.child('orders').push({ 
                  table: tableNumber, 
                  items: [{name: "🔔 ԿԱՆՉՈՒՄ ԵՆ ՄԱՏՈՒՑՈՂԻՆ", qty: 1}], 
                  timestamp: Date.now(),
@@ -895,7 +895,7 @@
         
         // 3. ՊԱՏՎԵՐԻ ԿԱՐԳԱՎԻՃԱԿԸ
         function askStatusConfirm() { 
-             db.ref('orders').push({ 
+             restaurantRef.child('orders').push({ 
                  table: tableNumber, 
                  items: [{name: "❓ ՀԱՐՑՆՈՒՄ ԵՆ ՊԱՏՎԵՐԸ", qty: 1}], 
                  timestamp: Date.now(),
@@ -919,7 +919,7 @@
         // --- ԼՍԵԼ ԵՎ ՑՈՒՑԱԴՐԵԼ ՊԱՏՎԵՐՆԵՐԸ ---
         function listenForTableUpdates(tNum) {
             // Լսում ենք բոլոր պատվերները, որոնք կապված են տվյալ սեղանի հետ
-            db.ref('orders').orderByChild('table').equalTo(tNum).on('value', (snapshot) => {
+            restaurantRef.child('orders').orderByChild('table').equalTo(tNum).on('value', (snapshot) => {
                 const orders = snapshot.val() || {};
                 renderReadyItems(orders); // Պատրաստ ապրանքների ցուցակ
                 renderActiveOrdersHistory(orders); // Ակտիվ Պատվերների Պատմություն

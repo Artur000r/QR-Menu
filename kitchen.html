@@ -179,7 +179,7 @@
 
         function listenForOrders() {
             // Լսում ենք orders ճյուղի բոլոր փոփոխությունները
-            db.ref('orders').on('value', (snapshot) => {
+            restaurantRef.child('orders').on('value', (snapshot) => {
                 const orders = snapshot.val() || {};
                 renderOrders(orders);
                 checkNewOrder(orders);
