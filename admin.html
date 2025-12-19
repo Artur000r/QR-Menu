@@ -287,38 +287,43 @@
         const ROLES = { '2024': 'cashier', '9999': 'manager' };
         let currentRole = null;  // <--- Ահա այս տողը պետք է լինի այստեղ
         let allOrders = {}; 
-        let menuItems = {}; 
+        let menuItems = {};
+        let stopStatus = {}; 
         let allFeedbacks = {};
         let categoriesMap = {};
         let currentEditingProductId = null;
 
         // ✅ ՃԻՇՏ ՏԱՐԲԵՐԱԿԸ
         function fetchData() {
-            console.log("Բեռնում ենք տվյալները...");
+            console.log("Fetching data...");
 
-            restaurantRef.child('orders').on('value', (snap) => {
-                allOrders = snap.val() || {};
-                
-                // Եթե ունես այս ֆունկցիաները, կանչիր
-                if(typeof calculateStats === 'function') calculateStats();
-                if(typeof filterAndRender === 'function') filterAndRender();
-                
-                // Մատուցողի համար՝ ցույց տալ պատրաստի պատվերները
-                if (currentRole === 'cashier' && typeof renderReadyOrders === 'function') {
-                    renderReadyOrders();
-                }
+            // 1. Stop Status (ԿԱՐԵՎՈՐ՝ Սխալ 1-ը ուղղելու համար)
+            restaurantRef.child('stop_status').on('value', (snap) => {
+                stopStatus = snap.val() || {}; // Եթե չկա, դարձնում ենք դատարկ օբյեկտ
+                if(typeof renderStopList === 'function') renderStopList();
             });
 
-            // Մենյուն և կատեգորիաները
+            // 2. Մենյու
             restaurantRef.child('menu').on('value', (snap) => {
                 menuItems = snap.val() || {};
                 if(typeof renderStopList === 'function') renderStopList();
             });
-            
+
+            // 3. Պատվերներ (Սա թարմացնում է ներքևի աղյուսակը)
+            restaurantRef.child('orders').on('value', (snap) => {
+                allOrders = snap.val() || {};
+                if(typeof calculateStats === 'function') calculateStats();
+                if(typeof filterAndRender === 'function') filterAndRender(); // Սա ստեղծում է կոճակը
+                if (currentRole === 'cashier' && typeof renderReadyOrders === 'function') {
+                    renderReadyOrders(); 
+                }
+            });
+
+            // 4. Կատեգորիաներ
             restaurantRef.child('categories').on('value', (snap) => {
-                const d = snap.val() || {};
+                const data = snap.val() || {};
                 categoriesMap = {};
-                for(let k in d) categoriesMap[k] = d[k].hy;
+                for(let id in data) categoriesMap[id] = data[id].hy;
                 if(typeof renderCategorySelect === 'function') renderCategorySelect();
             });
         }
@@ -675,43 +680,44 @@
                 });
             });
         }
-        function renderStopList(statusData) {
-            const container = document.getElementById('stopListControls');
-            container.innerHTML = '';
-            for (const pId in menuItems) {
-                const p = menuItems[pId];
-                const isSoldOut = statusData[pId] ? statusData[pId].soldOut : false;
-                const btnClass = isSoldOut ? 'sold-out' : 'available';
-                const btnText = isSoldOut ? 'Ավարտված է 🛑' : 'Առկա է ✅';
-                
-                container.innerHTML += `
-                    <div class="stop-list-item">
-                        <span class="product-name" onclick="openEditModal('${pId}')">
-                            ${p.name.hy} (${categoriesMap[p.category] || 'Անկատեգորիա'})
-                        </span>
-                        <div style="display:flex; gap: 10px;">
-                            <button onclick="openEditModal('${pId}')" style="background:#007bff; color:white; padding: 5px 10px;">⚙️ Խմբագրել</button>
-                            <button class="status-btn ${btnClass}" onclick="toggleStatus('${pId}', ${isSoldOut})">
-                                ${btnText}
-                            </button>
-                        </div>
-                    </div>
-                `;
+        function renderStopList() {
+            const div = document.getElementById('stopListControls');
+            if (!div) return;
+            div.innerHTML = '';
+
+            // Ապահովություն: Եթե մենյուն դեռ չի բեռնվել, ոչինչ չենք անում
+            if (!menuItems) return;
+
+            for (let id in menuItems) {
+                const item = menuItems[id];
+                // Եթե ապրանքը վնասված է (null է), անցնում ենք առաջ
+                if (!item) continue;
+
+                // Ստուգում ենք՝ արդյոք Stop List-ում է (ապահով ձևով)
+                let isSoldOut = false;
+                if (stopStatus && stopStatus[id] && stopStatus[id].soldOut) {
+                    isSoldOut = true;
+                }
+
+                const btnColor = isSoldOut ? '#dc3545' : '#28a745';
+                const btnText = isSoldOut ? 'Վաճառված է (Sold Out)' : 'Առկա է';
+                const opacity = isSoldOut ? '0.6' : '1';
+
+                div.innerHTML += `
+                    <div class="stop-list-item" style="opacity: ${opacity};">
+                        <span style="font-weight:bold;">${item.name.hy || item.name}</span>
+                        <button onclick="toggleStopStatus('${id}', ${isSoldOut})" 
+                                style="background:${btnColor}; color:white; border:none; padding:8px 15px; border-radius:4px; cursor:pointer;">
+                            ${btnText}
+                        </button>
+                    </div>`;
             }
         }
-        function toggleStatus(id, isCurrentlySoldOut) {
-            const newStatus = !isCurrentlySoldOut;
-            const btn = document.querySelector(`.stop-list-item button[onclick*="${id}"]`);
-
-            if (btn) {
-                btn.innerText = 'Թարմացվում է...';
-                btn.disabled = true;
-            }
-            
-                restaurantRef.child('stop_status/' + id).set({ soldOut: !isCurrentlySoldOut })
-            .catch(error => {
-                alert("Սխալ։ Կարգավիճակը չփոխվեց։");
-            });
+        function toggleStopStatus(id, currentStatus) {
+            // Օգտագործում ենք restaurantRef (SaaS)
+            restaurantRef.child('stop_status/' + id).update({
+                soldOut: !currentStatus
+            }).catch(err => console.error("Սխալ:", err));
         }
         
         // --- ԱԿՏԻՎ ՍԵՂԱՆՆԵՐԻ ԿԱՌԱՎԱՐՈՒՄ (Կասսա) ---
@@ -935,43 +941,44 @@
             tbody.innerHTML = '';
             closedTbody.innerHTML = '';
 
-            // Ֆիլտրման տրամաբանություն (Այսօր/Բոլորը)
             const filterType = document.getElementById('filterType').value;
             const filterDate = document.getElementById('filterDate').value;
             
-            // Տեսակավորում ենք (նորերը վերևում)
-            const sortedKeys = Object.keys(allOrders).sort((a,b) => allOrders[b].timestamp - allOrders[a].timestamp);
+            // Դասավորում (նորերը վերևում)
+            const sortedKeys = Object.keys(allOrders).sort((a,b) => {
+                return (allOrders[b].timestamp || 0) - (allOrders[a].timestamp || 0);
+            });
 
             for (let key of sortedKeys) {
                 const o = allOrders[key];
+                if (!o.items) continue;
+
                 const dateObj = new Date(o.timestamp || Date.now());
                 const dateStr = dateObj.toISOString().slice(0, 10);
 
-                // Ստուգում ենք ֆիլտրը
                 if (filterType === 'today' && dateStr !== new Date().toISOString().slice(0, 10)) continue;
                 if (filterType === 'date' && dateStr !== filterDate) continue;
 
-                // Հաշվում ենք գումարը
                 let totalSum = 0;
-                if (o.items) o.items.forEach(i => totalSum += (i.price * i.qty));
+                o.items.forEach(i => totalSum += (i.price * i.qty));
 
-                // --- ՎՃԱՐՄԱՆ ԿԱՐԳԱՎԻՃԱԿԸ ---
-                let paymentStatusHTML = `<span style="color:#dc3545; font-weight:bold;">Չվճարված</span>`;
-                let rowClass = "";
+                // Կարգավիճակներ
+                let paymentStatusHTML = o.payment_confirmed 
+                    ? `<span style="color:#28a745; font-weight:bold;">✅ Վճարված</span>`
+                    : `<span style="color:#dc3545; font-weight:bold;">Չվճարված</span>`;
 
-                if (o.payment_confirmed) {
-                    paymentStatusHTML = `<span style="color:#28a745; font-weight:bold;">✅ Վճարված</span>`;
-                    rowClass = "style='background-color:#f8fff9'"; // Թեթև կանաչ ֆոն
-                }
+                let rowClass = o.payment_confirmed ? "style='background-color:#f0fff4'" : "";
 
-                // Խոհանոցի կարգավիճակը
-                let kitchenStatus = o.status_kitchen_done ? 
-                    '<span style="color:green">✅ Պատրաստ</span>' : 
-                    '<span style="color:orange">⏳ Եփվում է</span>';
+                const kitchenStatus = o.status_kitchen_done 
+                    ? '<span style="color:green; font-weight:bold;">✅ Պատրաստ</span>' 
+                    : '<span style="color:orange; font-weight:bold;">⏳ Եփվում է</span>';
 
-                // --- ՑՈՒՑԱԴՐՈՒՄ ---
-                
-                // Եթե պատվերը ՓԱԿՎԱԾ է (մատուցողը փակել է) -> Գնում է ներքևի աղյուսակ
+                // --- ԿԱՐԵՎՈՐ ՄԱՍԸ (ԿՈՃԱԿԸ) ---
+                // Այստեղ օգտագործում ենք confirmPayment անունը
+                const confirmBtn = !o.payment_confirmed 
+                    ? `<button onclick="confirmPayment('${o.table}')" style="margin-top:5px; background:#007bff; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">Հաստատել</button>` 
+                    : '';
+
                 if (o.status_kitchen_closed) {
                     closedTbody.innerHTML += `
                         <tr>
@@ -979,11 +986,9 @@
                             <td>Սեղան ${o.table}</td>
                             <td>${totalSum} ֏</td>
                             <td>${o.payMethod}</td>
-                            <td>${o.payment_confirmed ? 'Այո' : 'Ոչ'}</td>
+                            <td>${o.payment_confirmed ? '✅ Այո' : '❌ Ոչ'}</td>
                         </tr>`;
-                } 
-                // Եթե ԲԱՑ է -> Գնում է վերևի աղյուսակ
-                else {
+                } else {
                     tbody.innerHTML += `
                         <tr ${rowClass}>
                             <td><b style="font-size:16px;">${o.table}</b></td>
@@ -992,7 +997,7 @@
                             <td>${kitchenStatus}</td>
                             <td>
                                 ${paymentStatusHTML} <br>
-                                ${!o.payment_confirmed ? `<button onclick="confirmPayment(${o.table})" style="margin-top:5px; font-size:11px;">Հաստատել</button>` : ''}
+                                ${confirmBtn}
                             </td>
                         </tr>`;
                 }
@@ -1064,36 +1069,35 @@
         }
 
         // --- ՎՃԱՐՈՒՄԸ ՀԱՍՏԱՏԵԼՈՒ ՖՈՒՆԿՑԻԱ (Սեղանի Բոլոր Չհաստատված Պատվերների համար) ---
-        // Գտեք confirmPayment ֆունկցիան և փոխարինեք սրանով
-        function confirmPayment(tableNum) {
-            if(!confirm(`Հաստատե՞լ Սեղան ${tableNum}-ի վճարումը։`)) return;
+        // --- ԱՎԵԼԱՑՐԵՔ ՍԱ ՁԵՐ ԿՈԴԻ ՄԵՋ (Ֆունկցիաների բաժնում) ---
 
-            // ՈՒՇԱԴՐՈՒԹՅՈՒՆ: Օգտագործում ենք restaurantRef
-            restaurantRef.child('orders').once('value').then(snapshot => {
-                const orders = snapshot.val() || {};
-                const updates = {};
-                let found = false;
+        // Այս ֆունկցիան պետք է լինի հենց այսպես (confirmPayment)
+        function confirmPaymentForTable(tableNum) {
+            if (!confirm(`Հաստատե՞լ Սեղան ${tableNum}-ի վճարումը։`)) return;
 
-                for(let key in orders) {
-                    const data = orders[key];
-                    // Փնտրում ենք այդ սեղանի չվճարված պատվերները
-                    if (data.table == tableNum && !data.payment_confirmed && data.items) {
-                        // ՈՒՇԱԴՐՈՒԹՅՈՒՆ: Հասցեն պետք է լինի առանց սկզբնական "/" նշանի
-                        updates[`orders/${key}/payment_confirmed`] = true;
-                        updates[`orders/${key}/payment_confirmed_time`] = Date.now();
-                        found = true;
+            restaurantRef.child('orders').once('value')
+                .then(snapshot => {
+                    const orders = snapshot.val() || {};
+                    const updates = {};
+                    let found = false;
+
+                    for (let key in orders) {
+                        const data = orders[key];
+                        if (data.table == tableNum && !data.payment_confirmed) {
+                            updates[`orders/${key}/payment_confirmed`] = true;
+                            updates[`orders/${key}/payment_confirmed_time`] = Date.now();
+                            found = true;
+                        }
                     }
-                }
 
-                if (found) {
-                    // ԿԱՐԵՎՈՐ: update-ը անում ենք restaurantRef-ի վրա
-                    return restaurantRef.update(updates).then(() => {
-                        // Հաջողություն
-                    });
-                } else {
-                    alert(`Սեղան ${tableNum}-ի համար չհաստատված պատվերներ չգտնվեցին։`);
-                }
-            }).catch(err => alert("Սխալ: " + err.message));
+                    if (found) {
+                        restaurantRef.update(updates)
+                            .then(() => console.log("Վճարումը հաստատվեց"))
+                            .catch(err => alert("Սխալ: " + err.message));
+                    } else {
+                        alert(`Սեղան ${tableNum}-ի համար բաց պատվերներ չկան:`);
+                    }
+                });
         }
         
         // --- ԿՐԻՏԻԿԱԿԱՆ ՀԱՐՑՈՒՄՆԵՐԻ ԼՈԳԻԿԱ (ԿԱՍՍԱՅԻ ՀԱՄԱՐ) ---
