@@ -377,14 +377,37 @@
 
         // --- ՍԿԶԲՆԱԿԱՆ ԲԵՌՆՈՒՄ ---
         document.addEventListener('DOMContentLoaded', () => {
-            updateUIText();
-            listenForCategories(); 
-            
-            const savedTable = localStorage.getItem('dolmaMenu_table');
+            const savedTable = localStorage.getItem('activeTable');
+
             if (savedTable) {
-                checkAndResumeSession(savedTable); 
+                // 1. Նախ ստուգում ենք բազայում՝ արդյոք այս սեղանը դեռ բաց է
+                restaurantRef.child('table_sessions/' + savedTable).once('value').then((snapshot) => {
+                    const session = snapshot.val();
+
+                    if (session && session.is_occupied) {
+                        // Եթե սեանսը կա բազայում, շարունակում ենք
+                        selectTable(savedTable);
+                    } else {
+                        // Եթե ադմինը փակել է սեղանը, մաքրում ենք հիշողությունը
+                        localStorage.removeItem('activeTable');
+                        tableNumber = null;
+                        document.getElementById('table-modal').classList.remove('hidden');
+                        location.reload(); // Թարմացնում ենք, որ գնա ընտրության բաժին
+                    }
+                });
+
+                // 2. Ավելացնում ենք "կենդանի" լսող սարք (Real-time listener)
+                // Սա կաշխատի այն պահին, երբ ադմինը սեղմի "Փակել"
+                restaurantRef.child('table_sessions/' + savedTable).on('value', (snapshot) => {
+                    if (!snapshot.exists()) {
+                        localStorage.removeItem('activeTable');
+                        location.reload();
+                    }
+                });
+
             } else {
-                fetchAndRenderTables(); 
+                // Եթե localStorage-ը դատարկ է, ցույց ենք տալիս ընտրության պատուհանը
+                document.getElementById('table-modal').classList.remove('hidden');
             }
         });
 
@@ -511,6 +534,16 @@
 
         function selectTable(num) {
             console.log("Փորձում ենք ընտրել սեղան:", num);
+
+            const savedTable = localStorage.getItem('activeTable');
+            if (savedTable && savedTable !== num.toString()) {
+                alert(`Դուք արդեն ունեք ակտիվ սեանս Սեղան ${savedTable}-ի վրա: Խնդրում ենք ավարտել այն կամ դիմել սպասարկողին:`);
+                return;
+            }
+
+            tableNumber = num;
+            // Հիշում ենք սեղանը սարքի մեջ
+            localStorage.setItem('activeTable', num);
             
             if (!num) {
                 alert("Սխալ՝ սեղանի համարը բացակայում է։");
@@ -544,6 +577,13 @@
             } else {
                 alert("Խնդիր: restaurantRef-ը գոյություն չունի։ Թարմացրեք էջը։");
             }
+            document.getElementById('headerTableNum').innerText = '#' + num;
+            document.getElementById('headerTableNum').classList.remove('hidden');
+            document.getElementById('table-modal').classList.add('hidden');
+            restaurantRef.child('table_sessions/' + num).update({
+                is_occupied: true,
+                last_active: Date.now()
+            });
         }
         
         function openSavedTableSession(tNum) {

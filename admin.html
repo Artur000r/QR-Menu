@@ -828,6 +828,61 @@
                     });
             });
         }
+
+        function calculateStats() {
+            let totalSales = 0;
+            let totalCount = 0;
+            let cashSales = 0;
+            let cardSales = 0;
+
+            // Ստանում ենք այսօրվա ամսաթիվը (եթե ուզում եք միայն այսօրվանը)
+            const todayStr = new Date().toISOString().slice(0, 10);
+
+            for (let key in allOrders) {
+                const order = allOrders[key];
+                
+                // Հաշվում ենք պատվերի գումարը
+                let orderSum = 0;
+                if (order.items) {
+                    order.items.forEach(item => {
+                        orderSum += (parseFloat(item.price) * parseInt(item.qty));
+                    });
+                }
+
+                // Հաշվում ենք ՄԻԱՅՆ վճարվածները (payment_confirmed = true)
+                if (order.payment_confirmed) { 
+                    totalSales += orderSum;
+                    totalCount++;
+
+                    if (order.payMethod === 'Կանխիկ') {
+                        cashSales += orderSum;
+                    } else {
+                        cardSales += orderSum;
+                    }
+                }
+            }
+
+            // Միջին չեկի հաշվարկ
+            let avgCheck = totalCount > 0 ? Math.round(totalSales / totalCount) : 0;
+
+            // --- ԱՅՍՏԵՂ ԵՆՔ ԹԱՐՄԱՑՆՈՒՄ ՁԵՐ STAT CARDS-երը ---
+            // Մենք փնտրում ենք ID-ները, որոնք դրված են stat-card div-երի ներսում
+
+            const elTotal = document.getElementById('totalSales');
+            if(elTotal) elTotal.innerText = totalSales.toLocaleString() + ' ֏';
+            
+            const elCount = document.getElementById('totalCount');
+            if(elCount) elCount.innerText = totalCount;
+            
+            const elAvg = document.getElementById('avgCheck');
+            if(elAvg) elAvg.innerText = avgCheck.toLocaleString() + ' ֏';
+                
+            const elCash = document.getElementById('cashSales');
+            if(elCash) elCash.innerText = cashSales.toLocaleString() + ' ֏';
+                
+            const elCard = document.getElementById('cardSales');
+            if(elCard) elCard.innerText = cardSales.toLocaleString() + ' ֏';
+        }
         
         function clearTableRequest(tableNum) {
              if (confirm(`Վստա՞հ եք, որ Սեղան ${tableNum}-ի հարցումը կատարված է։`)) {
@@ -1362,6 +1417,18 @@
                      alert("Պատվերը նշվեց որպես մատուցված։");
                  });
              }
+        }
+
+        // Սա այն ֆունկցիան է, որը կանչվում է "Փակել Սեղանը" կոճակը սեղմելիս
+        function closeTableSession(tableNum) {
+            if (!confirm(`Վստա՞հ եք, որ ուզում եք փակել Սեղան ${tableNum}-ը և ազատել այն։`)) return;
+
+            // 1. Ջնջում ենք սեանսը բազայից (սա հաճախորդի հեռախոսին կստիպի դուրս գալ)
+            restaurantRef.child('table_sessions/' + tableNum).remove()
+            .then(() => {
+                alert(`Սեղան ${tableNum}-ը հաջողությամբ ազատված է։`);
+            })
+            .catch(err => console.error("Սխալ սեղանը փակելիս:", err));
         }
     </script>
 </body>
