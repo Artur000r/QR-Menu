@@ -555,7 +555,7 @@
                 browser_id: browserId 
             };
             
-            db.ref('table_sessions/' + tNum).set(sessionData)
+            restaurantRef.child('table_sessions/' + tNum).set(sessionData)
             .then(() => {
                 document.getElementById('table-modal').classList.add('hidden');
                 document.getElementById('headerTableNum').innerText = `#${tNum}`;

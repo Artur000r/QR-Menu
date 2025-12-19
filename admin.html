@@ -775,7 +775,7 @@
                 return;
             }
             
-            db.ref('orders').once('value').then(snapshot => {
+            restaurantRef.child('orders').once('value').then(snapshot => {
                 const orders = snapshot.val() || {};
                 const updates = {};
                 
