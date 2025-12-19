@@ -342,7 +342,7 @@
             }
             
             // ԼՍՈՒՄ ԵՆՔ ՊԱՏՐԱՍՏ ԿԱՐԳԱՎԻՃԱԿԻ ՓՈՓՈԽՈՒԹՅՈՒՆՆԵՐԸ 
-             db.ref('orders').on('child_changed', (snapshot) => {
+            restaurantRef.child('orders').on('child_changed', (snapshot) => {
                 const data = snapshot.val();
                 if (data.status_kitchen_done && !data.status_kitchen_closed) {
                      // Ծանուցում միայն Cashier-ին, երբ Խոհանոցը պատրաստ է նշում ուտեստը
@@ -432,7 +432,7 @@
             // Գործողությունները կատարվում են անկախ
             const deleteOrders = db.ref('orders').remove();
             const deleteFeedback = db.ref('feedback').remove();
-            const deleteSessions = db.ref('table_sessions').remove();
+            const deleteSessions = restaurantRef.child('table_sessions').remove();
 
             Promise.all([deleteOrders, deleteFeedback, deleteSessions])
                 .then(() => {
@@ -534,7 +534,7 @@
                 price: price
             };
             
-            db.ref('menu_items').push(newProductData)
+            restaurantRef.child('menu').push(newProductData)
             .then(() => {
                 alert(`«${name_hy}»-ը հաջողությամբ ավելացվեց:`);
                 document.querySelectorAll('.add-controls input[type="text"], .add-controls input[type="url"], .add-controls input[type="number"], .add-controls textarea').forEach(el => el.value = '');
@@ -842,7 +842,7 @@
         
         // --- ՊԱՏՎԵՐՆԵՐԻ ԲԵՌՆՈՒՄ (ԻՐԱԿԱՆ ԺԱՄԱՆԱԿԻ ԹԱՐՄԱՑՈՒՄ) ---
         function fetchOrders() {
-            db.ref('orders').on('value', (snapshot) => {
+            restaurantRef.child('orders').on('value', (snapshot) => {
                 allOrders = {}; 
                 snapshot.forEach(childSnapshot => {
                     const val = childSnapshot.val();

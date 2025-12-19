@@ -477,43 +477,32 @@
         }
         
         // --- ՍԵՂԱՆՆԵՐԻ ՑՈՒՑԱԴՐՄԱՆ ԼՈԳԻԿԱ (Ընտրություն) ---
-        function fetchAndRenderTables() {
-            document.getElementById('table-modal').classList.remove('hidden');
-
-            restaurantRef.child('table_sessions/' + tNum)('value', (snapshot) => {
-                const sessions = snapshot.val() || {};
+       function fetchAndRenderTables() {
+            // Ուշադրություն. օգտագործիր restaurantRef
+            restaurantRef.child('tables').once('value', (snapshot) => {
+                const tables = snapshot.val();
                 const container = document.getElementById('tableSelectionContainer');
                 container.innerHTML = '';
-                
-                for (let i = 1; i <= 20; i++) {
-                    const tNum = i.toString();
-                    const isOccupied = sessions[tNum] && sessions[tNum].is_occupied;
-                    let isMySession = false;
 
-                    if (isOccupied && sessions[tNum].browser_id === browserId) {
-                        isMySession = true;
+                if (!tables) {
+                    // Եթե սեղաններ չկան, ստեղծիր օրինակ 10 հատ ավտոմատ
+                    for (let i = 1; i <= 10; i++) {
+                        container.innerHTML += `
+                            <button class="table-select-btn unlocked" onclick="selectTable(${i})">
+                                ${i}
+                            </button>`;
                     }
+                    return;
+                }
 
-                    let btnClass = 'table-select-btn';
-                    let btnText = tNum;
-                    let onclickFunc = `selectTable('${tNum}')`;
-
-                    if (isOccupied && !isMySession) {
-                        btnClass += ' locked';
-                        btnText += ` (Զբաղված)`;
-                        onclickFunc = ''; 
-                    } else if (isMySession) {
-                        btnClass += ' unlocked';
-                        btnText += ` ${tNum} (Ձերն է)`;
-                    } else {
-                        btnClass += ' unlocked';
-                    }
-
+                // Եթե կան, նկարիր եղածները
+                for (let i = 1; i <= Object.keys(tables).length; i++) {
+                    const isOccupied = tables[i] && tables[i].is_occupied;
                     container.innerHTML += `
-                        <button class="${btnClass}" onclick="${onclickFunc}" ${isOccupied && !isMySession ? 'disabled' : ''}>
-                            ${btnText}
-                        </button>
-                    `;
+                        <button class="table-select-btn ${isOccupied ? 'locked' : 'unlocked'}" 
+                                onclick="selectTable(${i})" ${isOccupied ? 'disabled' : ''}>
+                            ${i}
+                        </button>`;
                 }
             });
         }
