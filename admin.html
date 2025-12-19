@@ -293,21 +293,46 @@
         let currentEditingProductId = null;
 
         function fetchData() {
-            // Կատեգորիաներ
-            restaurantRef.child('categories').once('value', (snap) => { /*...*/ });
+            console.log("Fetching data for:", restaurantId);
+
+            // 1. Կատեգորիաների լսում
+            restaurantRef.child('categories').on('value', (snap) => {
+                const data = snap.val() || {};
+                categoriesMap = {};
+                for(let id in data) categoriesMap[id] = data[id].hy;
+                renderCategorySelect();
+                renderEditCategorySelect();
+            });
             
-            // Մենյու
+            // 2. Մենյուի լսում
             restaurantRef.child('menu').on('value', (snap) => {
                 menuItems = snap.val() || {};
                 renderStopList();
             });
 
-            // Պատվերներ (ստատիստիկայի համար)
+            // 3. Պատվերների լսում (Ստատիստիկա + Աղյուսակ + Պատրաստի Ուտեստներ)
             restaurantRef.child('orders').on('value', (snap) => {
                 allOrders = snap.val() || {};
+                
+                // Թարմացնում ենք ստատիստիկան
                 calculateStats();
+                
+                // Թարմացնում ենք աղյուսակը
                 filterAndRender();
+                
+                // Եթե գանձապահ է, թարմացնում ենք նաև "Պատրաստ է" ցուցակը
+                if (currentRole === 'cashier') {
+                    renderReadyOrders();
+                }
             });
+
+            // 4. Կարծիքների լսում (Մենեջերի համար)
+            if(currentRole === 'manager') {
+                restaurantRef.child('feedback').on('value', (snapshot) => {
+                    allFeedbacks = snapshot.val() || {};
+                    // renderFeedbacks(); // Եթե ունես այդ ֆունկցիան
+                });
+            }
         }
 
         // Ապրանք ավելացնելիս այն կգնա ճիշտ տեղում
@@ -406,12 +431,7 @@
             document.getElementById(id).classList.add('hidden'); 
         }
         
-        function fetchData() {
-            fetchOrders(); 
-            if(currentRole === 'manager') {
-                 fetchFeedbacks();
-            }
-        }
+        
         
         // --- ՀԱՄԱԿԱՐԳԻ ԶՐՈՅԱՑՄԱՆ ՖՈՒՆԿՑԻԱ (RESET) ---
         function resetAllOrdersAndSessions() {
@@ -1310,48 +1330,61 @@
 
         // Այս ֆունկցիան փակում է պատվերը (երբ մատուցողը վերցնում է այն)
         function closeKitchenOrder(key) {
-            if(!confirm("Վերցրե՞ցիք պատվերը։ Այն կանհետանա ցուցակից։")) return;
+            if(!confirm("Վերցրե՞ցիք պատվերը։ Այն կհեռացվի «Պատրաստ է» ցուցակից։")) return;
             
+            // Թարմացնում ենք բազայում
             restaurantRef.child('orders/' + key).update({
                 status_kitchen_closed: true
+            }).then(() => {
+                console.log("Order closed by waiter");
             });
         }
         
         // ՑՈՒՑԱԴՐՄԱՆ ՖՈՒՆԿՑԻԱ
-        function renderReadyOrders(readyItems) {
+        function renderReadyOrders() {
             const container = document.getElementById('readyOrdersList');
-            container.innerHTML = '';
+            if (!container) return;
             
-            if (readyItems.length === 0) {
-                container.innerHTML = '<p style="color:#1a4d2e;">Այս պահին պատրաստ ուտեստներ չկան:</p>';
-                return;
-            }
-            
-            // Դասավորել սեղանով և ժամանակով
-            readyItems.sort((a, b) => a.data.table - b.data.table || a.data.timestamp - b.data.timestamp);
+            container.innerHTML = ''; // Մաքրում ենք
+            let hasReady = false;
 
-            readyItems.forEach(item => {
-                const order = item.data;
-                const itemList = order.items.map(i => `<li>${i.name} (x${i.qty})</li>`).join('');
-                const time = new Date(order.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            for (let key in allOrders) {
+                const order = allOrders[key];
                 
-                container.innerHTML += `
-                    <div style="padding: 15px; border-bottom: 1px dashed #c8e6c9; display: flex; justify-content: space-between; align-items: flex-start;">
-                        <div>
-                            <span style="font-size: 20px; font-weight: bold; color: #1a4d2e;">🍽️ Սեղան #${order.table}</span>
-                            <small style="color:#777; margin-left: 10px;">Պատվիրվել է ${time}</small>
-                            <ul style="list-style-type: disc; padding-left: 20px; margin: 5px 0 0 0; font-size: 15px;">
-                                ${itemList}
+                // Ցույց ենք տալիս, եթե խոհանոցը պատրաստել է (status_kitchen_done)
+                // ԵՎ մատուցողը դեռ չի վերցրել (!status_kitchen_closed)
+                if (order.status_kitchen_done && !order.status_kitchen_closed) {
+                    hasReady = true;
+                    
+                    // Ուտեստների ցուցակը
+                    let itemsHtml = '';
+                    if (order.items) {
+                        order.items.forEach(item => {
+                            itemsHtml += `<li>${item.name.hy || item.name} (x${item.qty})</li>`;
+                        });
+                    }
+
+                    container.innerHTML += `
+                        <div style="background: white; border-left: 5px solid #28a745; padding: 15px; margin-bottom: 10px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <h3 style="margin:0; color:#28a745;">✅ ՍԵՂԱՆ #${order.table}</h3>
+                                <button onclick="closeKitchenOrder('${key}')" style="background: #28a745; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-weight:bold;">
+                                    Վերցնել
+                                </button>
+                            </div>
+                            <ul style="margin: 10px 0 0 20px; padding:0; color: #555;">
+                                ${itemsHtml}
                             </ul>
-                            ${order.comment ? `<p style="font-style: italic; font-size: 13px; color:#555; margin: 5px 0 0 0;">Նշում: ${order.comment}</p>` : ''}
-                        </div>
-                        <button onclick="markOrderAsServed('${item.key}')" 
-                                style="background: #007bff; color: white; padding: 10px 15px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; flex-shrink: 0;">
-                            Տարա սեղան
-                        </button>
-                    </div>
-                `;
-            });
+                        </div>`;
+                    
+                    // Ձայնային ազդանշան (եթե նոր է)
+                    // playSound(); 
+                }
+            }
+
+            if (!hasReady) {
+                container.innerHTML = '<p style="color:#1a4d2e; text-align:center;">Այս պահին պատրաստ ուտեստներ չկան:</p>';
+            }
         }
         
         // ՈւՏԵՍՏԸ ՄԱՏՈՒՑՎԱԾ ՆՇԵԼՈՒ ՖՈՒՆԿՑԻԱ
